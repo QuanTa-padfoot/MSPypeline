@@ -15,6 +15,7 @@ doc/source/pathways
 local_input
 local_output
 tmp
+data
 
 *.ipynb
 *.df
