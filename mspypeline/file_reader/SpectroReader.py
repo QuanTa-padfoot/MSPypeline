@@ -1,5 +1,7 @@
+from fileinput import filename
 from msilib.schema import Error
 import os
+import re
 import pandas as pd
 import logging
 from collections import defaultdict
@@ -16,8 +18,7 @@ class SpectroReader(BaseReader):
       and whether to rename duplicate row indices.
     """
     name = "spectroReader"
-    protein_txt = "proteins.txt"
-    required_files = [protein_txt]
+    required_files = ['.xls or .csv file']
     plotter = SpectroPlotter
     use_imputed = False
     format_doubleindx = False
@@ -42,8 +43,10 @@ class SpectroReader(BaseReader):
         super().__init__(start_dir, reader_config, loglevel=loglevel)
         self.data_dir = self.start_dir
         self.index_col = index_col
+        
         try:
-            file_dir = os.path.join(self.data_dir, "proteins.txt")
+            file_dir = self.ext_change(self.data_dir)[0]
+            print(file_dir + ' main')
             separators = [",", "\t", ";"]
             df = pd.DataFrame()
             while(df.shape[1] <= 1) & bool(separators):
@@ -69,14 +72,15 @@ class SpectroReader(BaseReader):
         Indices are set to the value given in initialization (PG.Genes per default). Quantity columns are extracted.
         If selected imputed values are set to 0 and duplicate indices are renamed.
         """
-        file_dir = os.path.join(self.data_dir, SpectroReader.protein_txt)
+        file_dir = self.ext_change(self.data_dir)[0]
+        print(file_dir + ' func')
         separators = [",", "\t", ";"]
         df = pd.DataFrame()
         while(df.shape[1] <= 1) & bool(separators):
             try:
                 df = pd.read_csv(file_dir, sep=separators.pop(0))
             except:
-                print("Unable to open file with" + (separators[0]) + "seperator")
+                print("Unable to open file with" + (separators[0]) + "separator")
         use_index = df[self.index_col]
         missing_map  = df.filter(regex=(".IsIdentified"))
         df = df.filter(regex=(".Quantity"))
@@ -89,6 +93,20 @@ class SpectroReader(BaseReader):
         df.set_index(use_index, drop=False, inplace=True)
         df.index = df.index.fillna("nan")
         return df
+
+    def ext_change(self, data_dir):
+        list_files=[]
+        for file in os.listdir(data_dir):
+            if file.endswith(".xls"):
+                filename, ext = os.path.splitext(file)
+                new_filename = filename + '.csv'
+                old_filedir = os.path.join(data_dir, file)
+                new_filedir = os.path.join(data_dir, new_filename)
+                os.rename(old_filedir, new_filedir)
+                list_files.append(new_filedir)
+            elif file.endswith(".csv"):
+                list_files.append(os.path.join(data_dir, file))
+        return(list_files)
 
     def format_double_indx(self, indx):
         """
