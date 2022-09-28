@@ -10,7 +10,7 @@ doc/source/_static
 doc/source/savefig
 doc/source/go_terms
 doc/source/pathways
-
+df_*
 
 local_input
 local_output
