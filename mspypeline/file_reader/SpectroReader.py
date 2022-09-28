@@ -13,7 +13,7 @@ class SpectroReader(BaseReader):
     """
     | A child class of the :class:`~BaseReader`.
     | The SpectroReader preprocesses data from Spectronaut file into the internal data format to provide the correct input
-      for the plotters. Required files to start the SpectroReader is the **proteins.txt** file from Spectronaut.
+      for the plotters. Required files to start the SpectroReader is the xls files from Spectronaut.
     | use_imputed and format_doubleindx are class variables that control whether to use the imputed values from Spectronaut
       and whether to rename duplicate row indices.
     """
@@ -45,8 +45,10 @@ class SpectroReader(BaseReader):
         self.index_col = index_col
         
         try:
-            file_dir = self.ext_change(self.data_dir)[0]
-            print(file_dir + ' main')
+            try:
+                file_dir = self.ext_change(self.data_dir)[0]
+            except IndexError:
+                file_dir = []
             separators = [",", "\t", ";"]
             df = pd.DataFrame()
             while(df.shape[1] <= 1) & bool(separators):
@@ -72,8 +74,10 @@ class SpectroReader(BaseReader):
         Indices are set to the value given in initialization (PG.Genes per default). Quantity columns are extracted.
         If selected imputed values are set to 0 and duplicate indices are renamed.
         """
-        file_dir = self.ext_change(self.data_dir)[0]
-        print(file_dir + ' func')
+        try:
+            file_dir = self.ext_change(self.data_dir)[0]
+        except IndexError:
+            file_dir = []
         separators = [",", "\t", ";"]
         df = pd.DataFrame()
         while(df.shape[1] <= 1) & bool(separators):

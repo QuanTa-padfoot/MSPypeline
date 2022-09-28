@@ -317,7 +317,7 @@ class MQReader(BaseReader):
         except KeyError:
             # if the columns "Reverse", "Potential contaminant" are not present
             pass
-
+        df_peptides.to_csv('df_peptides.csv')
         return df_peptides
 
     def preprocess_summary(self):
