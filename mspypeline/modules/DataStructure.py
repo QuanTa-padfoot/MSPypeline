@@ -136,7 +136,7 @@ class DataNode:
                     queue += [child]
         data = pd.concat(data, axis=1)
         if method is not None:
-            data = data.aggregate(method, axis=1).rename(self.full_name, axis=1)
+            data = data.aggregate(method, axis='columns') #.rename(self.full_name, axis='columns') removed until further info
         return data
 
     def groupby(
