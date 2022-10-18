@@ -395,6 +395,7 @@ class MSPGUI(tk.Tk):
         self.update_button()
         mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
         mspplots.create_results()
+        tk.messagebox.showinfo('Status update', 'Tasks completed')
         self.running_text.set("Please press Start")
 
     def report_button(self):
@@ -403,6 +404,7 @@ class MSPGUI(tk.Tk):
         self.update_button()
         mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
         mspplots.create_report()
+        tk.messagebox.showinfo('Status update', 'Report created')
         self.running_text.set("Please press Start")
 
     def plot_intermediate_row(self, text: str):
