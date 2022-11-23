@@ -8,6 +8,7 @@ from collections import defaultdict
 from mspypeline.core.MSPPlots import SpectroPlotter
 from mspypeline.helpers import dict_depth
 from mspypeline.file_reader import BaseReader, MissingFilesException
+from itertools import groupby
 
 class SpectroReader(BaseReader):
     """
@@ -47,7 +48,7 @@ class SpectroReader(BaseReader):
         try:
             try:
                 file_dir = self.ext_change(self.data_dir)[0]
-            except IndexError:
+            except (IndexError):
                 file_dir = []
             separators = [",", "\t", ";"]
             df = pd.DataFrame()
@@ -55,7 +56,7 @@ class SpectroReader(BaseReader):
                 try:
                     df = pd.read_csv(file_dir, sep=separators.pop(0))
                 except:
-                    print("Unable to open file with given seperator")
+                    print("Unable to open file with given separator")
             df = df.filter(regex=(".Quantity"))
             formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
             self.intensity_column_names = formatted_proteins_txt_columns
@@ -86,16 +87,30 @@ class SpectroReader(BaseReader):
             except:
                 print("Unable to open file with" + (separators[0]) + "separator")
         use_index = df[self.index_col]
-        missing_map  = df.filter(regex=(".IsIdentified"))
+        quant_cols = [col for col in df.columns if '.Quantity' in col]
+        filt_cols = [col for col in df.columns if '.IsIdentified' in col]
+        quantfilt_cols = quant_cols + filt_cols
+        keyf = lambda text: text.split(".")[0]
+        grouped_cols = [list(items) for gr, items in groupby(sorted(quantfilt_cols), key=keyf)]
+        for i in range(0, len(grouped_cols)):
+            df.loc[pd.isna(df[grouped_cols[i][1]]) == True, grouped_cols[i][0]]=False
+
+        missing_map  = df.filter(regex=(".IsIdentified")).replace({"Filtered": False, "True":True, "False":False})
         df = df.filter(regex=(".Quantity"))
+        df = df.replace({"Filtered": 0, "NaN":0})
+        
+        df.to_csv('C:/Users/victo/Documents/MSPypeline dev/data/Data Victor/values.csv')
+        missing_map.to_csv('C:/Users/victo/Documents/MSPypeline dev/data/Data Victor/missingmap.csv')
         use_cols = ["Intensity " + col for col in self.intensity_column_names]
         df.columns = use_cols
         if self.use_imputed is False:
             df = pd.DataFrame(df.values * missing_map.values, columns=df.columns, index=df.index)
+            
         if self.format_double_indx:
             use_index = self.format_double_indx(use_index)
         df.set_index(use_index, drop=False, inplace=True)
         df.index = df.index.fillna("nan")
+        df.to_csv('C:/Users/victo/Documents/MSPypeline dev/data/Data Victor/Final.csv')
         return df
 
     def ext_change(self, data_dir):
@@ -106,7 +121,7 @@ class SpectroReader(BaseReader):
                 new_filename = filename + '.csv'
                 old_filedir = os.path.join(data_dir, file)
                 new_filedir = os.path.join(data_dir, new_filename)
-                os.rename(old_filedir, new_filedir)
+                os.replace(old_filedir, new_filedir)
                 list_files.append(new_filedir)
             elif file.endswith(".csv"):
                 list_files.append(os.path.join(data_dir, file))
@@ -144,16 +159,20 @@ class SpectroReader(BaseReader):
         analysis_design = {}
         for col in cols:
             cur_col = col.split(".")[0]
-            cur_col = cur_col.split("_")[2:]
-            if len(cur_col)==3:
-                new_col = "_".join(cur_col)
-            elif len(cur_col)==5:
-                new_col = cur_col[0] + cur_col[1] + "_" + cur_col[2] + "_" + cur_col[3] + cur_col[4]
-            elif len(cur_col)==4:
-                if("rep" in cur_col[3]):
-                    new_col = cur_col[0] + "_" + cur_col[1] + "_" + cur_col[2] + cur_col[3]
-                else:
-                    new_col = cur_col[0] + cur_col[1] + "_" + cur_col[2] + "_" + cur_col[3]
+            cur_col = cur_col.split("_")
+            if len(cur_col)<=2:
+                new_col = cur_col[0] + "_" + cur_col[1]
+            else:
+                cur_col = cur_col[2:]
+                if len(cur_col)==3:
+                    new_col = "_".join(cur_col)
+                elif len(cur_col)==5:
+                    new_col = cur_col[0] + cur_col[1] + "_" + cur_col[2] + "_" + cur_col[3] + cur_col[4]
+                elif len(cur_col)==4:
+                    if("rep" in cur_col[3]):
+                        new_col = cur_col[0] + "_" + cur_col[1] + "_" + cur_col[2] + cur_col[3]
+                    else:
+                        new_col = cur_col[0] + cur_col[1] + "_" + cur_col[2] + "_" + cur_col[3]
             processed_cols.append(new_col)
             self.dictizeString(new_col, new_col, analysis_design)
         return processed_cols, analysis_design
