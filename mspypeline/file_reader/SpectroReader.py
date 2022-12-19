@@ -95,12 +95,10 @@ class SpectroReader(BaseReader):
         for i in range(0, len(grouped_cols)):
             df.loc[pd.isna(df[grouped_cols[i][1]]) == True, grouped_cols[i][0]]=False
 
-        missing_map  = df.filter(regex=(".IsIdentified")).replace({"Filtered": False, "True":True, "False":False})
+        missing_map  = df.filter(regex=(".IsIdentified")).replace({"Filtered": False, "True": True, "False": False})
         df = df.filter(regex=(".Quantity"))
-        df = df.replace({"Filtered": 0, "NaN":0})
+        df = df.replace({"Filtered": float(0)}).fillna(0)
         
-        df.to_csv('C:/Users/victo/Documents/MSPypeline dev/data/Data Victor/values.csv')
-        missing_map.to_csv('C:/Users/victo/Documents/MSPypeline dev/data/Data Victor/missingmap.csv')
         use_cols = ["Intensity " + col for col in self.intensity_column_names]
         df.columns = use_cols
         if self.use_imputed is False:
@@ -110,7 +108,6 @@ class SpectroReader(BaseReader):
             use_index = self.format_double_indx(use_index)
         df.set_index(use_index, drop=False, inplace=True)
         df.index = df.index.fillna("nan")
-        df.to_csv('C:/Users/victo/Documents/MSPypeline dev/data/Data Victor/Final.csv')
         return df
 
     def ext_change(self, data_dir):
@@ -158,12 +155,17 @@ class SpectroReader(BaseReader):
         processed_cols = []
         analysis_design = {}
         for col in cols:
-            cur_col = col.split(".")[0]
+            cur_col = col.split(" ")[1]
+            cur_col = cur_col.split(".")[0]
             cur_col = cur_col.split("_")
+            print(cur_col)
             if len(cur_col)<=2:
                 new_col = cur_col[0] + "_" + cur_col[1]
+            elif len(cur_col) ==3:
+                new_col = cur_col[0] + "_" + cur_col[1] + "_" + cur_col[2]
             else:
                 cur_col = cur_col[2:]
+                print(cur_col)
                 if len(cur_col)==3:
                     new_col = "_".join(cur_col)
                 elif len(cur_col)==5:

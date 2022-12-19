@@ -297,16 +297,18 @@ class BasePlotter:
         # extract all raw intensities from the dataframe
         # replace all 0 with nan and remove the prefix from the columns
         intensities = df.loc[:, [c for c in df.columns if c.startswith(self.int_mapping[option_name])]
-            ].replace({0: np.nan}).rename(lambda x: x.replace(self.int_mapping[option_name], ""), axis=1).to_numeric()
+            ].replace({0: np.nan}).rename(lambda x: x.replace(self.int_mapping[option_name], ""), axis=1)
         if scale == "log2":
             intensities = np.exp2(intensities)
             
         # ensure data will not have faulty values after log2 transformation
-        print(type(intensities.iloc[10,10]))
+        print((intensities < 0).sum().sum())
+        print((intensities < 0))
         assert np.isinf(intensities).sum().sum() == 0
-        assert (intensities < 1).sum().sum() == 0
+        assert (intensities < 0).sum().sum() == 0
         # filter all rows where all intensities are nan
         mask = (~intensities.isna()).sum(axis=1) != 0
+
         intensities = intensities[mask]
 
         # add log2 intensities

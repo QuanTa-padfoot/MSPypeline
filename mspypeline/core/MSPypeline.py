@@ -1,6 +1,7 @@
 import argparse
 import os
 import tkinter as tk
+import tkinter.tix as tix
 from tkinter import filedialog
 import logging
 from typing import Optional, Iterable
@@ -194,6 +195,7 @@ class MSPGUI(tk.Tk):
         create_tool_tip(norm_method_label, "For more information about normalization visit the documentation.\n"
                         "Can be found in Workflow -> Data Preprocessing -> Normalization options.")
         self.number_of_plots += 1
+
         self.plot_intermediate_row("Choose a Normalization Method")
 
         tk.Label(self, text="Outlier detection / Comparisons", font="Helvetica 10 bold").grid(
