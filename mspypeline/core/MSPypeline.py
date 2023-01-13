@@ -1,9 +1,11 @@
 import argparse
 import os
 import tkinter as tk
+import tkinter.ttk as ttk
 import tkinter.tix as tix
 from tkinter import filedialog
 import logging
+from threading import Thread
 from typing import Optional, Iterable
 import webbrowser
 try:
@@ -98,7 +100,19 @@ class MSPGUI(tk.Tk):
         self.mspinit = MSPInitializer(file_dir, yml_file, loglevel=loglevel)
         self.logger = get_logger(self.__class__.__name__, loglevel=loglevel)
 
+        
+        #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-light.tcl'))
+        #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-dark.tcl'))
+        self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/azure.tcl'))
+        
+        #style.theme_use('forest-light')
+        #style.theme_use('forest-dark')
+        self.tk.call("set_theme", "light")
+        style = ttk.Style()
+        style.configure('my.TButton',font=('Helvetica', 12, 'bold'))
+
         self.number_of_plots = 0
+        self.plots_per_section = 0
 
         self.plot_settings = {}
         self.intensity_options = ["lfq_log2", "raw_log2", "ibaq_log2"]
@@ -106,49 +120,50 @@ class MSPGUI(tk.Tk):
 
         self.title("mspypeline")
 
-        path_label = tk.Label(self, text="Dir to analyze", font="Helvetica 10 bold").grid(row=0, column=0)
+        path_label = ttk.Label(self, text="Dir to analyze", font="Helvetica 10 bold").grid(row=0, column=0, sticky=tk.W, padx = 5)
 
-        yaml_label = tk.Label(self, text="Yaml file", font="Helvetica 10 bold").grid(row=0, column=1)
+        yaml_label = ttk.Label(self, text="Yaml file", font="Helvetica 10 bold").grid(row=2, column=0, sticky=tk.W, padx = 5)
 
-        reader_label = tk.Label(self, text="File reader", font="Helvetica 10 bold").grid(row=0, column=2)
+        reader_label = ttk.Label(self, text="File reader", font="Helvetica 10 bold").grid(row=2, column=1, sticky=tk.W, padx = 5)
 
         self.dir_text = tk.StringVar(value=file_dir)
-        dir_button = tk.Button(self, textvariable=self.dir_text,
-                               command=lambda: browsefunc(filedialog.askdirectory, self.dir_text, fn_params={
-                                   "title": "Please select a directory with MaxQuant result files"}))
+        dir_button = ttk.Button(self, textvariable=self.dir_text,
+                                width=len(max(self.mspinit.list_full_gos, key=len)),
+                                command=lambda: browsefunc(filedialog.askdirectory, self.dir_text, fn_params={
+                                   "title": "Please select a directory with result files"}))
         create_tool_tip(dir_button, "Select a directory to analyze")
-        dir_button.grid(row=1, column=0)
+        dir_button.grid(row=1, column=0, sticky=tk.W, padx=20, columnspan=3)
 
         self.yaml_text = tk.StringVar()
-        self.yaml_button = tk.OptionMenu(self, self.yaml_text, *self.yaml_options)
+        self.yaml_button = ttk.OptionMenu(self, self.yaml_text, *self.yaml_options)
         create_tool_tip(self.yaml_button, "Leave blank for first analysis"
                                             "\nFor re-analysis, load previously created Yaml file")
-        self.yaml_button.grid(row=1, column=1)
+        self.yaml_button.grid(row=3, column=0, sticky=tk.W, padx=20)
 
         self.reader_text = tk.StringVar(value="mqreader")
-        self.reader_button = tk.OptionMenu(self, self.reader_text, *self.reader_options.keys())
-        self.reader_button.grid(row=1, column=2)
+        self.reader_button = ttk.OptionMenu(self, self.reader_text, list(self.reader_options.keys())[0], *self.reader_options.keys())
+        self.reader_button.grid(row=3, column=1, sticky=tk.W, padx=20)
 
         self.replicate_var = tk.IntVar(value=1)
-        replicate_button = tk.Checkbutton(self, text="Does the file have technical replicates?",
+        replicate_button = ttk.Checkbutton(self, text="Does the file have technical replicates?",
                                           variable=self.replicate_var)
-        replicate_button.grid(row=2, column=0)
-        create_tool_tip(replicate_button, "If selected, the samples of the last level are avaraged")
+        replicate_button.grid(row=3, column=2, padx=15, pady=10, sticky=tk.W)
+        create_tool_tip(replicate_button, "If selected, the samples of the last level are averaged")
         
 
-        go_proteins_label = tk.Label(self, text="Go analysis lists")
+        go_proteins_label = ttk.Label(self, text="Go analysis lists")
         create_tool_tip(go_proteins_label, "For a full list of Proteins see the Documentation."
                                            "\nCustom Gene Lists -> GO Terms")
-        go_proteins_label.grid(row=3, column=0)
+        go_proteins_label.grid(row=5, column=0, sticky=tk.W, padx=5)
 
-        experiments_label = tk.Label(self, text="Pathway analysis lists")
-        create_tool_tip(experiments_label, "For a full list of Proteins see the Documentation."
+        pathways_label = ttk.Label(self, text="Pathway analysis lists")
+        create_tool_tip(pathways_label, "For a full list of Proteins see the Documentation."
                                            "\nCustom Gene Lists -> Pathways")
-        experiments_label.grid(row=3, column=1)
+        pathways_label.grid(row=7, column=0, sticky=tk.W, padx=5)
 
-        design_label = tk.Label(self, text="Sample names")
+        design_label = ttk.Label(self, text="Sample names")
         create_tool_tip(design_label, "Inferred sample names of the experiment")
-        design_label.grid(row=3, column=2)
+        design_label.grid(row=9, column=0, sticky=tk.W, padx=5)
 
         self.go_term_list = tk.Listbox(self, selectmode="multiple", height=5,
                                        width=len(max(self.mspinit.list_full_gos, key=len)))
@@ -156,106 +171,147 @@ class MSPGUI(tk.Tk):
         for x in self.mspinit.list_full_gos:
             self.go_term_list.insert("end", x)
 
-        self.go_term_list.grid(row=4, column=0)
+        
+        #scrollbar = ttk.Scrollbar(orient=tk.VERTICAL, command=self.go_term_list.yview)
+        #self.go_term_list.config(yscrollcommand=scrollbar.set)
+        #scrollbar.grid(row=4, column=0, columnspan=3, sticky=tk.W, padx=20, )
+
+        self.go_term_list.grid(row=6, column=0, columnspan=3,sticky=tk.W, padx=20)
 
         self.pathway_list = tk.Listbox(self, selectmode="multiple", height=5,
-                                       width=len(max(self.mspinit.list_full_pathways, key=len)))
+                                       width=len(max(self.mspinit.list_full_gos, key=len)))
         self.pathway_list.configure(exportselection=False)
         for x in self.mspinit.list_full_pathways:
             self.pathway_list.insert("end", x)
 
-        self.pathway_list.grid(row=4, column=1)
+        self.pathway_list.grid(row=8, column=0, columnspan=3, sticky=tk.W, padx=20)
 
-        self.experiments_list = tk.Listbox(self, height=5)
-        self.experiments_list.grid(row=4, column=2)
+        self.experiments_list = tk.Listbox(self, height=5, width=30)
+        self.experiments_list.grid(row=10, column=0, columnspan=2, sticky=tk.W, padx=20)
 
-        report_button = tk.Button(self, text="Create Report",
+        report_button = ttk.Button(self, text="Create Report",
                                   command=lambda: self.report_button())
-        report_button.grid(row=5, column=0)
+        report_button.grid(row=11, column=0, padx=20, pady=20)
         create_tool_tip(report_button, "MaxQuant report for quality control")
 
-        plot_label = tk.Label(self, text="Which plots should be created").grid(row=6, column=0)
+        #plot_label = ttk.Label(self, text="Plot selection", font='Helvetica 10 bold').grid(row=14, column=0, sticky = tk.W)
 
-        intensity_label = tk.Label(self, text="Intensities").grid(row=6, column=1)
+        #intensity_label = ttk.Label(self, text="Intensities").grid(row=7, column=1)
 
-        levels_label = tk.Label(self, text="Levels").grid(row=6, column=2)
-
-        self.heading_length = 7
-
-        tk.Label(self, text="Normalization plots", font="Helvetica 10 bold").grid(
-            row=self.heading_length + self.number_of_plots, column=0)
-        self.number_of_plots += 1
-        self.plot_row("Normalization overview", "normalization_overview_all_normalizers",
-                      "Displays original data and data after different normalization methods")
-        self.plot_row("Heatmap overview", "heatmap_overview_all_normalizers",
-                      "Displays intensity heatmap of original data and after different normalization methods")
-
-        norm_method_label = tk.Label(self, text="Choose a Normalization Method:", font="Helvetica 10 bold")
-        norm_method_label.grid(row=self.heading_length + self.number_of_plots, column=1)
-        create_tool_tip(norm_method_label, "For more information about normalization visit the documentation.\n"
-                        "Can be found in Workflow -> Data Preprocessing -> Normalization options.")
-        self.number_of_plots += 1
-
-        self.plot_intermediate_row("Choose a Normalization Method")
-
-        tk.Label(self, text="Outlier detection / Comparisons", font="Helvetica 10 bold").grid(
-            row=self.heading_length + self.number_of_plots, column=0)
-        self.number_of_plots += 1
-        self.plot_row("Detection counts", "detection_counts",
-                      "How many proteins were detected how frequently in the samples of a group?")
-        self.plot_row("Number of detected proteins", "detected_proteins_per_replicate",
-                      "How many proteins were detected in each of my samples and in total for each group?")
-        self.plot_row("Venn diagrams", "venn_results",
-                      "How large is the intersection of detected proteins of my samples in each group? How many proteins are uniquely detected in a sample?")
-        self.plot_row("Group diagrams", "venn_groups",
-                      "How large is the intersection of detected proteins between different groups? How many proteins are uniquely detected in a group?")
-        self.plot_row("PCA overview", "pca_overview",
-                      "How similar are my samples? Do samples cluster together?")
-        self.plot_row("Intensity histogram", "intensity_histograms",
-                      "How does the intensity profile of my samples look? How similar are the intensity profiles?")
-        self.plot_row("Relative std", "relative_std",
-                      "What is the relative standard deviation of the samples of a group?")
-        self.plot_row("Scatter replicates", "scatter_replicates",
-                      "How well do the overall protein intensities of the samples of each group correlate?")
-        self.plot_row("Experiment comparison", "experiment_comparison",
-                      "How well do the overall protein intensities of different groups correlate?")
-        self.plot_row("Rank", "rank",
-                      "Where do my proteins of interest rank in intensity compared to all other proteins?")
-
-        tk.Label(self, text="Statistical inference", font="Helvetica 10 bold").grid(
-            row=self.heading_length + self.number_of_plots, column=0)
-        self.number_of_plots += 1
-        self.plot_row("Pathway Analysis", "pathway_analysis",
-                      "What is the intensity of my proteins of interest, and is it significantly different in one group versus the other?")
-        #self.plot_row("Pathway Timecourse", "pathway_timecourse")
-        self.plot_row("Go analysis", "go_analysis",
-                      "Are the proteins of a group enriched for the selected GO terms?")
-        self.plot_row("Volcano plot (R)", "r_volcano",
-                      "Which proteins are significantly higher or lower in intensity comparing two groups? Which proteins are detected only in one group and not in the other?")
+        #levels_label = ttk.Label(self, text="Levels").grid(row=7, column=2)
         self.p_val_var = tk.IntVar(value=1)
-        pval_button = tk.Checkbutton(self, text="Use adjusted p value", variable=self.p_val_var)
-        pval_button.grid(row=self.heading_length + self.number_of_plots, column=1)
+        pval_button = ttk.Checkbutton(self, text="Use adjusted p value", variable=self.p_val_var)
+        pval_button.grid(row=10, column=2, sticky=tk.W, padx=15)
         create_tool_tip(pval_button,"Select to focus on regulated proteins, deselect to focus on affected pathways and processes")
 
-        total_length = self.heading_length + self.number_of_plots
-
-        update_button = tk.Button(self, text="Update", command=lambda: self.update_button())
-        update_button.grid(row=total_length + 1, column=1)
+        update_button = ttk.Button(self, text="Update", command=lambda: self.update_button(), width=10)
+        update_button.grid(row=11, column=1)
         create_tool_tip(update_button, "Press if Yaml or sample_mapping.txt files were changed")
 
-        start_button = tk.Button(self, text="Start",
+        start_button = ttk.Button(self, text="Start", style='my.TButton',
                                  command=lambda: self.start_button())
-        start_button.grid(row=total_length + 1, column=2)
+        start_button.grid(row=12, column=3, sticky=tk.SE, padx=20, pady=10)
 
-        documentation_link = tk.Label(self, text="Documentation link", font="Helvetica 10 underline",
-                                      fg="blue", cursor="hand2")
+        documentation_link = ttk.Label(self, text="Documentation link", font="Helvetica 10 underline",
+                                      cursor="hand2")
         documentation_link.bind("<ButtonRelease-1>",
                                 lambda _: webbrowser.open_new("https://mspypeline.readthedocs.io/en/latest/"))
-        documentation_link.grid(row=total_length + 2, column=0)
+        documentation_link.grid(row=11, column=2)
 
-        self.running_text = tk.StringVar(value="Please press Start")
-        self.running_label = tk.Label(self, textvariable=self.running_text).grid(row=total_length + 2, column=2)
+        #self.running_text = tk.StringVar(value="Please press Start")
+        #self.running_label = ttk.Label(self, textvariable=self.running_text).grid(row=12, column=3, sticky=tk.NE, padx=30)
 
+        style_switch = ttk.Checkbutton(self, text='Dark theme', style='Switch.TCheckbutton', command=lambda: self.style_handler())
+        style_switch.grid(row=12, column=0)
+
+
+        self.heading_length = 12
+
+        tabControl = ttk.Notebook(self, height=450)
+        tab1 = ttk.Frame(tabControl)
+        tab2 = ttk.Frame(tabControl)
+        tab3 = ttk.Frame(tabControl)
+        tabControl.add(tab1, text ='Normalization')
+        tabControl.add(tab2, text ='Outlier Detection')
+        tabControl.add(tab3, text ='Statistical Inference')
+        tabControl.grid(row = 1, column=3, rowspan=self.heading_length, sticky=tk.NE, padx=20)
+
+        ##Section Normalization
+
+        self.plots_per_section = 0
+        
+        #ttk.Label(tab1, text="Normalization plots", font="Helvetica 10 bold").grid(
+        #    row=self.heading_length + self.number_of_plots, column=0, sticky=tk.W, padx=5)
+        #self.number_of_plots += 1
+        norm_method_label = ttk.Label(tab1, text="Choose a Normalization Method:", font="Helvetica 10 bold")
+        norm_method_label.grid(row=self.heading_length + self.number_of_plots+3, column=0, pady=20)
+        create_tool_tip(norm_method_label, "For more information about normalization visit the documentation.\n"
+                        "Can be found in Workflow -> Data Preprocessing -> Normalization options.")
+        self.plots_per_section +=2
+        self.number_of_plots += 1
+
+        self.plot_row("Normalization overview", "normalization_overview_all_normalizers",
+                      "Displays original data and data after different normalization methods", tab=tab1)
+        self.plots_per_section +=1
+        self.plot_row("Heatmap overview", "heatmap_overview_all_normalizers",
+                      "Displays intensity heatmap of original data and after different normalization methods", tab=tab1)
+        self.plots_per_section +=1
+
+        self.plot_intermediate_row("Choose a Normalization Method", tab = tab1)
+
+
+        ##Section Outlier detection
+        self.plots_per_section = 0
+        #ttk.Label(tab2, text="Outlier detection / Comparisons", font="Helvetica 10 bold").grid(
+        #    row=self.heading_length + self.number_of_plots, column=0, sticky=tk.W, padx=5)
+        #self.number_of_plots += 1
+        self.plot_row("Detection counts", "detection_counts",
+                      "How many proteins were detected how frequently in the samples of a group?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Number of detected proteins", "detected_proteins_per_replicate",
+                      "How many proteins were detected in each of my samples and in total for each group?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Venn diagrams", "venn_results",
+                      "How large is the intersection of detected proteins of my samples in each group? How many proteins are uniquely detected in a sample?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Group diagrams", "venn_groups",
+                      "How large is the intersection of detected proteins between different groups? How many proteins are uniquely detected in a group?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("PCA overview", "pca_overview",
+                      "How similar are my samples? Do samples cluster together?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Intensity histogram", "intensity_histograms",
+                      "How does the intensity profile of my samples look? How similar are the intensity profiles?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Relative std", "relative_std",
+                      "What is the relative standard deviation of the samples of a group?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Scatter replicates", "scatter_replicates",
+                      "How well do the overall protein intensities of the samples of each group correlate?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Experiment comparison", "experiment_comparison",
+                      "How well do the overall protein intensities of different groups correlate?", tab = tab2)
+        self.plots_per_section +=1
+        self.plot_row("Rank", "rank",
+                      "Where do my proteins of interest rank in intensity compared to all other proteins?", tab = tab2)
+
+        ##Section Statistical Inference
+        
+        #ttk.Label(tab3, text="Statistical inference", font="Helvetica 10 bold").grid(
+        #    row=self.heading_length + self.number_of_plots, column=0, sticky=tk.W, padx=5)
+        #self.number_of_plots += 1
+        self.plots_per_section = 0
+        self.plot_row("Pathway Analysis", "pathway_analysis",
+                      "What is the intensity of my proteins of interest, and is it significantly different in one group versus the other?", tab = tab3)
+        #self.plot_row("Pathway Timecourse", "pathway_timecourse")
+        self.plot_row("Go analysis", "go_analysis",
+                      "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
+        self.plot_row("Volcano plot (R)", "r_volcano",
+                      "Which proteins are significantly higher or lower in intensity comparing two groups? Which proteins are detected only in one group and not in the other?", tab = tab3)
+        
+        total_length = self.heading_length + self.number_of_plots
+
+        
         # add all tracing to the variables
         self.dir_text.trace("w", self.dir_setter)
         self.yaml_text.trace("w", self.yaml_path_setter)
@@ -268,7 +324,20 @@ class MSPGUI(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self._exit)
         self.mspinit.configs.update(configs)
         self.update_yaml_options()
+        self.resizable(False, False) 
         self.mainloop()
+
+    def style_handler(self):
+        if self.tk.call("ttk::style", "theme", "use") == "azure-dark":
+            # Set light theme
+            self.tk.call("set_theme", "light")
+            style = ttk.Style()
+            style.configure('my.TButton',foreground="black", font=('Helvetica', 12, 'bold'))
+        else:
+            # Set dark theme
+            style = ttk.Style()
+            self.tk.call("set_theme", "dark")
+            style.configure('my.TButton',foreground="white", font=('Helvetica', 12, 'bold'))
 
     def _exit(self):
         self.quit()
@@ -392,58 +461,155 @@ class MSPGUI(tk.Tk):
         self.update_yaml_options()
 
     def start_button(self):
-        self.running_text.set("Creating Plots")
+        self.warningbox = WarningBox('Status Update', 'Creating Plots')
+        self.warningbox.wait_visibility()
+        x = self.winfo_x() + self.winfo_width()//2 - self.warningbox.winfo_width()//2
+        y = self.winfo_y() + self.winfo_height()//2 - self.warningbox.winfo_height()//2
+        self.warningbox.geometry(f"+{x}+{y}")
+        
+        self.start_mspypeline_thread(None)
+        #self.running_text.set("Please press Start")
+
+    def start_ops(self):
         self.update()
         self.update_button()
         mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
         mspplots.create_results()
-        tk.messagebox.showinfo('Status update', 'Tasks completed')
-        self.running_text.set("Please press Start")
+    
+    def start_mspypeline_thread(self, event):
+        global start_thread
+        start_thread = Thread(target=self.start_ops)
+        start_thread.daemon = True
+        self.warningbox.progressbar.start()
+        start_thread.start()
+        self.after(20, self.check_mspypeline_thread)
+    
+    def check_mspypeline_thread(self):
+        if start_thread.is_alive():
+            self.after(20, self.check_mspypeline_thread)
+        else:
+            self.warningbox.progressbar.stop()
+            self.warningbox.updateInfo('Status Update', 'Tasks completed')
 
     def report_button(self):
-        self.running_text.set("Creating Report")
+        #self.running_text.set("Please press Start")
+        self.warningbox = WarningBox('Status Update', 'Creating Report')
+        self.warningbox.wait_visibility()
+        x = self.winfo_x() + self.winfo_width()//2 - self.warningbox.winfo_width()//2
+        y = self.winfo_y() + self.winfo_height()//2 - self.warningbox.winfo_height()//2
+        self.warningbox.geometry(f"+{x}+{y}")
+        
+        self.report_mspypeline_thread(None)
+    
+    def report_ops(self):
         self.update()
         self.update_button()
         mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
         mspplots.create_report()
-        tk.messagebox.showinfo('Status update', 'Report created')
-        self.running_text.set("Please press Start")
 
-    def plot_intermediate_row(self, text: str):
+    def report_mspypeline_thread(self, event):
+        global report_thread
+        report_thread = Thread(target=self.report_ops)
+        report_thread.daemon = True
+        self.warningbox.progressbar.start()
+        report_thread.start()
+        self.after(20, self.check_report_thread)
+
+    def check_report_thread(self):
+        if report_thread.is_alive():
+            self.after(20, self.check_report_thread)
+        else:
+            self.warningbox.progressbar.stop()
+            self.warningbox.updateInfo('Status Update', 'Report completed')
+
+    def plot_intermediate_row(self, text: str, tab = None):
+        if tab == None:
+            col = 0
+            row = self.heading_length + self.number_of_plots
+            int_var = tk.IntVar(value=1)
+            self.normalizer_text = tk.StringVar(value="None")
+            self.normalizer_button = ttk.OptionMenu(self, self.normalizer_text, *self.normalize_options)
+            self.normalizer_button.grid(row=row, column=col)
+
+            self.number_of_plots += 1
+        else:
+            col = 1
+            row = self.heading_length + self.number_of_plots
+            int_var = tk.IntVar(value=1)
+            self.normalizer_text = tk.StringVar(value="None")
+            self.normalizer_button = ttk.OptionMenu(tab, self.normalizer_text, *self.normalize_options)
+            self.normalizer_button.grid(row=row, column=col, sticky=tk.W, padx = 8)
+
+            self.number_of_plots += 1
+
+
+    def plot_row(self, text: str, plot_name: str, plot_tool_tip: str = None, tab = None):
+        row = self.heading_length + self.number_of_plots
+        col = 0
         row = self.heading_length + self.number_of_plots
         int_var = tk.IntVar(value=1)
-        self.normalizer_text = tk.StringVar(value="None")
-        self.normalizer_button = tk.OptionMenu(self, self.normalizer_text, *self.normalize_options)
-        self.normalizer_button.grid(row=row, column=1)
+        if tab == None:
+            checkbutton = ttk.Checkbutton(self, text=text, variable=int_var)
+            checkbutton.grid(row=row, column=col, sticky=tk.W, padx=20)
+            if plot_tool_tip:
+                create_tool_tip(checkbutton, plot_tool_tip)
+            intensity_list = MultiSelectOptionMenu(self, self.intensity_options, "Select Intensities")
+            intensity_list.grid(row=row, column=0, sticky=tk.W, padx=5)
 
-        self.number_of_plots += 1
+            level_list = MultiSelectOptionMenu(self, button_text="Select Levels")
+            level_list.grid(row=row, column=0, sticky=tk.W, padx=5)
 
-    def plot_row(self, text: str, plot_name: str, plot_tool_tip: str = None):
-        row = self.heading_length + self.number_of_plots
-        int_var = tk.IntVar(value=1)
-        checkbutton = tk.Checkbutton(self, text=text, variable=int_var)
-        checkbutton.grid(row=row, column=0)
-        if plot_tool_tip:
-            create_tool_tip(checkbutton, plot_tool_tip)
+            self.number_of_plots += 1
+            self.plot_settings.update({
+                f"{plot_name}_int": int_var,
+                f"{plot_name}_var": intensity_list,
+                f"{plot_name}_levels": level_list
+            })
+        else:
+            checkbutton = ttk.Checkbutton(tab, text=text, variable=int_var)
+            checkbutton.grid(row=row, column=col, sticky=tk.W, padx=20)
+            if plot_tool_tip:
+                create_tool_tip(checkbutton, plot_tool_tip)
+            intensity_list = MultiSelectOptionMenu(tab, self.intensity_options, "Select Intensities")
+            intensity_list.grid(row=row, column=1+col, sticky=tk.W, padx=5)
 
-        intensity_list = MultiSelectOptionMenu(self, self.intensity_options, "Select Intensities")
-        intensity_list.grid(row=row, column=1)
+            level_list = MultiSelectOptionMenu(tab, button_text="Select Levels")
+            level_list.grid(row=row, column=2+col, sticky=tk.W, padx=5)
 
-        level_list = MultiSelectOptionMenu(self, button_text="Select Levels")
-        level_list.grid(row=row, column=2)
+            self.number_of_plots += 1
+            self.plot_settings.update({
+                f"{plot_name}_int": int_var,
+                f"{plot_name}_var": intensity_list,
+                f"{plot_name}_levels": level_list
+            })
 
-        self.number_of_plots += 1
-        self.plot_settings.update({
-            f"{plot_name}_int": int_var,
-            f"{plot_name}_var": intensity_list,
-            f"{plot_name}_levels": level_list
-        })
+class WarningBox(tk.Toplevel):
+    def __init__(self, title='', message=''):
+        tk.Toplevel.__init__(self)
+        self.geometry('200x100')
+        self.title(title)
+        self.messageLabel = tk.Label(self, text=message)
+        self.messageLabel.pack(expand=True, fill=tk.BOTH)
+        self.progressbar = ttk.Progressbar(
+            self,
+            orient='horizontal',
+            mode='indeterminate',
+            length=150
+        )
+        self.progressbar.pack(anchor=tk.S, pady=(0,20))
+        self.progressbar.start()
 
+    def updateInfo(self, title='', message=''):
+        self.progressbar.destroy()
+        self.title(title)
+        self.messageLabel.configure(text=message)
+        exitbutton = ttk.Button(self, text='OK', command=lambda: self.destroy())
+        exitbutton.pack(anchor=tk.S, pady=(0,20))
 
 class MultiSelectOptionMenu(tk.Frame):
     def __init__(self, parent, choices: Optional[Iterable] = None, button_text: str = "Default text"):
         super().__init__(parent)
-        menubutton = tk.Menubutton(self, text=button_text, indicatoron=True, borderwidth=1, relief="raised")
+        menubutton = ttk.Menubutton(self, text=button_text, style='custom.TMenubutton')
         self.menu = tk.Menu(menubutton, tearoff=False)
         menubutton.configure(menu=self.menu)
         menubutton.pack(pady=3, padx=3)
@@ -483,8 +649,8 @@ class ToolTip:
         self.tipwindow = tk.Toplevel(self.widget)
         self.tipwindow.wm_overrideredirect(1)
         self.tipwindow.wm_geometry("+%d+%d" % (x, y))
-        label = tk.Label(self.tipwindow, text=text, justify=tk.LEFT,
-                         background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+        label = ttk.Label(self.tipwindow, text=text, justify=tk.LEFT,
+                         background="#ffffe0", foreground='black',relief=tk.SOLID, borderwidth=1,
                          font=("tahoma", "8", "normal"))
         label.pack(ipadx=1)
 
