@@ -470,7 +470,6 @@ class MSPGUI(tk.Tk):
         x = self.winfo_x() + self.winfo_width()//2 - self.warningbox.winfo_width()//2
         y = self.winfo_y() + self.winfo_height()//2 - self.warningbox.winfo_height()//2
         self.warningbox.geometry(f"+{x}+{y}")
-        
         self.start_mspypeline_thread(None)
         #self.running_text.set("Please press Start")
 
@@ -498,22 +497,16 @@ class MSPGUI(tk.Tk):
         if start_thread.is_alive():
             self.after(20, self.check_mspypeline_thread)
         elif self.err == None:
-            self.warningbox.progressbar.stop()
-            self.warningbox.destroy()
-            tk.messagebox.showinfo(title='Status Update', message='Tasks completed')
+            self.popup_window('Status Update', 'Tasks completed')
             #self.warningbox.updateInfo('Status Update', 'Tasks completed')
         elif self.err == KeyError:
-            self.warningbox.progressbar.stop()
-            self.warningbox.destroy()
-            tk.messagebox.showerror(title='Status Update', message='File could not be read with selected reader\nError code: ' + self.err.__name__)
+            self.popup_window(title='Status Update', message=('File could not be read with selected reader\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
         ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         else:
-            self.warningbox.progressbar.stop()
-            self.warningbox.destroy()
-            tk.messagebox.showerror(title='Status Update', message='An error occurred, please check Terminal\nError code: ' + self.err.__name__)
+            self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
-
+    
     def report_button(self):
         #self.running_text.set("Please press Start")
         self.warningbox = WarningBox('Status Update', 'Creating Report')
@@ -521,14 +514,19 @@ class MSPGUI(tk.Tk):
         x = self.winfo_x() + self.winfo_width()//2 - self.warningbox.winfo_width()//2
         y = self.winfo_y() + self.winfo_height()//2 - self.warningbox.winfo_height()//2
         self.warningbox.geometry(f"+{x}+{y}")
-        
         self.report_mspypeline_thread(None)
     
     def report_ops(self):
-        self.update()
-        self.update_button()
-        mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
-        mspplots.create_report()
+        try:
+            self.update()
+            self.update_button()
+            mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
+            mspplots.create_report()
+        except Exception as err:
+            self.err = type(err)
+            return
+        else:
+            self.err = None
 
     def report_mspypeline_thread(self, event):
         global report_thread
@@ -537,13 +535,28 @@ class MSPGUI(tk.Tk):
         self.warningbox.progressbar.start()
         report_thread.start()
         self.after(20, self.check_report_thread)
-
+    
     def check_report_thread(self):
         if report_thread.is_alive():
             self.after(20, self.check_report_thread)
+        elif self.err == None:
+            self.popup_window('Status Update', 'Report completed')
+            #self.warningbox.updateInfo('Status Update', 'Tasks completed')
+        elif self.err == KeyError:
+            self.popup_window(title='Status Update', message=('File could not be read with selected reader\nError code: ' + self.err.__name__), error=True)
+            #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
+        ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         else:
-            self.warningbox.progressbar.stop()
-            self.warningbox.updateInfo('Status Update', 'Report completed')
+            self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
+            #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
+        
+    def popup_window(self, title='', message='', error=False):
+        self.warningbox.progressbar.stop()
+        self.warningbox.destroy()
+        if error:
+            tk.messagebox.showerror(title=title, message=message)
+        else:
+            tk.messagebox.showinfo(title=title, message=message)
 
     def plot_intermediate_row(self, text: str, tab = None):
         if tab == None:
