@@ -100,6 +100,9 @@ class MSPGUI(tk.Tk):
         self.mspinit = MSPInitializer(file_dir, yml_file, loglevel=loglevel)
         self.logger = get_logger(self.__class__.__name__, loglevel=loglevel)
 
+        #icon = tk.PhotoImage(file = (os.path.dirname(os.path.abspath(__file__)) + '/GUI/mspypeline_ico.png'))
+        #self.iconphoto(False, icon)
+
         
         #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-light.tcl'))
         #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-dark.tcl'))
@@ -391,6 +394,7 @@ class MSPGUI(tk.Tk):
         # get the reader class by the saved name
         self.selected_reader = self.reader_options.get(self.mspinit.configs.get("selected_reader", "mqreader"))
         reader_settings = self.mspinit.configs.get(self.selected_reader.name, {})
+        self.reader_text.set(self.selected_reader.name)
         level_names = reader_settings.get("level_names", [])
         level_names = {i: name for i, name in enumerate(level_names)}
         levels = reader_settings.get("levels", 0)
@@ -471,25 +475,44 @@ class MSPGUI(tk.Tk):
         #self.running_text.set("Please press Start")
 
     def start_ops(self):
-        self.update()
-        self.update_button()
-        mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
-        mspplots.create_results()
+        try:
+            self.update()
+            self.update_button()
+            mspplots = self.selected_reader.plotter.from_MSPInitializer(self.mspinit)
+            mspplots.create_results()
+        except Exception as err:
+            self.err = type(err)
+            return
+        else:
+            self.err = None
     
     def start_mspypeline_thread(self, event):
         global start_thread
         start_thread = Thread(target=self.start_ops)
-        start_thread.daemon = True
         self.warningbox.progressbar.start()
+        start_thread.daemon = True
         start_thread.start()
         self.after(20, self.check_mspypeline_thread)
     
     def check_mspypeline_thread(self):
         if start_thread.is_alive():
             self.after(20, self.check_mspypeline_thread)
+        elif self.err == None:
+            self.warningbox.progressbar.stop()
+            self.warningbox.destroy()
+            tk.messagebox.showinfo(title='Status Update', message='Tasks completed')
+            #self.warningbox.updateInfo('Status Update', 'Tasks completed')
+        elif self.err == KeyError:
+            self.warningbox.progressbar.stop()
+            self.warningbox.destroy()
+            tk.messagebox.showerror(title='Status Update', message='File could not be read with selected reader\nError code: ' + self.err.__name__)
+            #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
+        ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         else:
             self.warningbox.progressbar.stop()
-            self.warningbox.updateInfo('Status Update', 'Tasks completed')
+            self.warningbox.destroy()
+            tk.messagebox.showerror(title='Status Update', message='An error occurred, please check Terminal\nError code: ' + self.err.__name__)
+            #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
 
     def report_button(self):
         #self.running_text.set("Please press Start")
@@ -586,7 +609,7 @@ class MSPGUI(tk.Tk):
 class WarningBox(tk.Toplevel):
     def __init__(self, title='', message=''):
         tk.Toplevel.__init__(self)
-        self.geometry('200x100')
+        self.geometry('300x100')
         self.title(title)
         self.messageLabel = tk.Label(self, text=message)
         self.messageLabel.pack(expand=True, fill=tk.BOTH)
@@ -604,7 +627,16 @@ class WarningBox(tk.Toplevel):
         self.title(title)
         self.messageLabel.configure(text=message)
         exitbutton = ttk.Button(self, text='OK', command=lambda: self.destroy())
-        exitbutton.pack(anchor=tk.S, pady=(0,20))
+        exitbutton.pack(anchor=tk.SE, pady=(0,10), padx=(0,20))
+
+    def errorbox(self, title='', message=''):
+        self.progressbar.destroy()
+        self.title(title)
+        self.errorlogo = tk.PhotoImage(self, file = "Your_image.png")
+        self.messageLabel.configure(text=message)
+        exitbutton = ttk.Button(self, text='OK', command=lambda: self.destroy())
+        exitbutton.pack(anchor=tk.SE, pady=(0,10), padx=(0,20))
+
 
 class MultiSelectOptionMenu(tk.Frame):
     def __init__(self, parent, choices: Optional[Iterable] = None, button_text: str = "Default text"):
