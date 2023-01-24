@@ -1,4 +1,4 @@
-name: mspypeline_v2
+name: mspypeline_0.12.0
 channels:
   - defaults
   - conda-forge
