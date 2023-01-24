@@ -1,6 +1,6 @@
 conda env create -f .\environment.yml
 
-conda activate mspypeline_0.12.0
+conda activate mspypeline_dev
 
 python .\setup.py install
 

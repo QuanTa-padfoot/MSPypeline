@@ -11,6 +11,7 @@ mspypeline.egg-info/SOURCES.txt
 mspypeline.egg-info/dependency_links.txt
 mspypeline.egg-info/requires.txt
 mspypeline.egg-info/top_level.txt
+mspypeline/config/config.yml
 mspypeline/config/ms_analysis_adjustable_options.yml
 mspypeline/config/ms_analysis_default.yml
 mspypeline/config/go_terms/GO_APOPTOTIC_SIGNALING_PATHWAY.txt
