@@ -1,1 +1,3 @@
 graft mspypeline/config
+graft mspypeline/core
+graft mspypeline/flask_scripts
