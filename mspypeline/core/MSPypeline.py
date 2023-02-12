@@ -503,6 +503,8 @@ class MSPGUI(tk.Tk):
             self.popup_window(title='Status Update', message=('File could not be read with selected reader\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
         ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
+        elif self.err == NotImplementedError:
+            self.popup_window(title='Status Update', message=('A requested task is currently not implemented\nError code: ' + self.err.__name__), error = True)
         else:
             self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
