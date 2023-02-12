@@ -50,13 +50,28 @@ class SpectroReader(BaseReader):
                 file_dir = self.ext_change(self.data_dir)[0]
             except (IndexError):
                 file_dir = []
-            separators = [",", "\t", ";"]
             df = pd.DataFrame()
-            while(df.shape[1] <= 1) & bool(separators):
-                try:
-                    df = pd.read_csv(file_dir, sep=separators.pop(0))
-                except:
-                    print("Unable to open file with given separator")
+            with open(file_dir, "r") as df_head:
+                head = [next(df_head) for x in range(4)]
+            breaker = False
+            for cur_separator in ["\t", ";", ","]:
+                h = head[0].split(cur_separator)
+                if (len(h)>3):
+                    for line in head[1:4]:
+                        l = line.split(cur_separator)
+                        l = l[3:]
+                        if bool(any("," in element for element in l)):
+                            try:
+                                df = pd.read_csv(file_dir, sep=cur_separator, decimal=",")
+                                breaker = True
+                                break
+                            except:
+                                print(f"Unable to open file with ({cur_separator}) separator and (,) decimal point")
+                    if not breaker:
+                        try:
+                            df = pd.read_csv(file_dir, sep=cur_separator, decimal=".")
+                        except:
+                            print(f"Unable to open file with ({cur_separator}) separator and (.) decimal point")
             df = df.filter(regex=(".Quantity"))
             formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
             self.intensity_column_names = formatted_proteins_txt_columns
@@ -81,11 +96,27 @@ class SpectroReader(BaseReader):
             file_dir = []
         separators = [",", "\t", ";"]
         df = pd.DataFrame()
-        while(df.shape[1] <= 1) & bool(separators):
-            try:
-                df = pd.read_csv(file_dir, sep=separators.pop(0))
-            except:
-                print("Unable to open file with" + (separators[0]) + "separator")
+        with open(file_dir, "r") as df_head:
+            head = [next(df_head) for x in range(4)]
+        breaker = False
+        for cur_separator in ["\t", ";", ","]:
+            h = head[0].split(cur_separator)
+            if (len(h) > 3):
+                for line in head[1:4]:
+                    l = line.split(cur_separator)
+                    l = l[3:]
+                    if bool(any("," in element for element in l)):
+                        try:
+                            df = pd.read_csv(file_dir, sep=cur_separator, decimal=",")
+                            breaker = True
+                            break
+                        except:
+                            print(f"Unable to open file with ({cur_separator}) separator and (,) decimal point")
+                if not breaker:
+                    try:
+                        df = pd.read_csv(file_dir, sep=cur_separator, decimal=".")
+                    except:
+                        print(f"Unable to open file with ({cur_separator}) separator and (.) decimal point")
         use_index = df[self.index_col]
         quant_cols = [col for col in df.columns if '.Quantity' in col]
         filt_cols = [col for col in df.columns if '.IsIdentified' in col]
