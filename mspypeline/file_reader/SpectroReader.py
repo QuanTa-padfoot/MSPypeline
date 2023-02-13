@@ -72,6 +72,11 @@ class SpectroReader(BaseReader):
                             df = pd.read_csv(file_dir, sep=cur_separator, decimal=".")
                         except:
                             print(f"Unable to open file with ({cur_separator}) separator and (.) decimal point")
+            if (df.shape[1] > 3):
+                for column in ["PG.ProteinGroups", "PG.Genes", "PG.ProteinDescriptions"]:
+                    for row in df.index:
+                        df[column][row] = df[column][row].replace("!", ";")
+                        df[column][row] = df[column][row].replace("@", ",")
             df = df.filter(regex=(".Quantity"))
             formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
             self.intensity_column_names = formatted_proteins_txt_columns
@@ -117,6 +122,11 @@ class SpectroReader(BaseReader):
                         df = pd.read_csv(file_dir, sep=cur_separator, decimal=".")
                     except:
                         print(f"Unable to open file with ({cur_separator}) separator and (.) decimal point")
+        if (df.shape[1] > 3):
+            for column in ["PG.ProteinGroups", "PG.Genes", "PG.ProteinDescriptions"]:
+                for row in df.index:
+                    df[column][row] = df[column][row].replace("!", ";")
+                    df[column][row] = df[column][row].replace("@", ",")
         use_index = df[self.index_col]
         quant_cols = [col for col in df.columns if '.Quantity' in col]
         filt_cols = [col for col in df.columns if '.IsIdentified' in col]
