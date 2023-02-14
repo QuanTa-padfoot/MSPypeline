@@ -6,7 +6,7 @@ import logging
 
 from mspypeline.helpers import dict_depth, get_analysis_design
 from mspypeline.file_reader import BaseReader, MissingFilesException
-from mspypeline.core.MSPPlots import MaxQuantPlotter
+from mspypeline.core import MaxQuantPlotter
 
 
 class MQReader(BaseReader):
