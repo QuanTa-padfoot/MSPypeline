@@ -125,8 +125,8 @@ class SpectroReader(BaseReader):
         if (df.shape[1] > 3):
             for column in ["PG.ProteinGroups", "PG.Genes", "PG.ProteinDescriptions"]:
                 for row in df.index:
-                    df[column][row] = df[column][row].replace("!", ";")
-                    df[column][row] = df[column][row].replace("@", ",")
+                    df.loc[row, column] = df.loc[row, column].replace("!", ";")
+                    df.loc[row, column] = df.loc[row, column].replace("@", ",")
         use_index = df[self.index_col]
         quant_cols = [col for col in df.columns if '.Quantity' in col]
         filt_cols = [col for col in df.columns if '.IsIdentified' in col]
