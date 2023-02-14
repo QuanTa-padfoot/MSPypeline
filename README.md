@@ -62,5 +62,5 @@ $env:R_HOME = 'C:\Program Files\R\R-4.2.1'
 Now you can start the GUI:
 ```
 conda activate mspypeline_dev
-python -m mspypeline –gui
+python -m mspypeline –-gui
 ```
