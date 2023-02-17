@@ -46,37 +46,25 @@ class SpectroReader(BaseReader):
         self.index_col = index_col
         
         try:
+            df = pd.DataFrame()
             try:
                 file_dir = self.ext_change(self.data_dir)[0]
             except (IndexError):
                 file_dir = []
-            df = pd.DataFrame()
-            with open(file_dir, "r") as df_head:
-                head = [next(df_head) for x in range(4)]
-            breaker = False
-            for cur_separator in ["\t", ";", ","]:
-                h = head[0].split(cur_separator)
-                if (len(h)>3):
-                    for line in head[1:4]:
-                        l = line.split(cur_separator)
-                        l = l[3:]
-                        if bool(any("," in element for element in l)):
-                            try:
-                                df = pd.read_csv(file_dir, sep=cur_separator, decimal=",")
-                                breaker = True
-                                break
-                            except:
-                                print(f"Unable to open file with ({cur_separator}) separator and (,) decimal point")
-                    if not breaker:
-                        try:
-                            df = pd.read_csv(file_dir, sep=cur_separator, decimal=".")
-                        except:
-                            print(f"Unable to open file with ({cur_separator}) separator and (.) decimal point")
-            if (df.shape[1] > 3):
-                for column in ["PG.ProteinGroups", "PG.Genes", "PG.ProteinDescriptions"]:
-                    for row in df.index:
-                        df[column][row] = df[column][row].replace("!", ";")
-                        df[column][row] = df[column][row].replace("@", ",")
+            for cur_separator in [",", "\t", ";"]:
+                try:
+                    df = pd.read_csv(file_dir, sep=cur_separator)
+                    if df.columns[0] == 'PG.ProteinGroups':
+                        df = self.df_preprocess_split_gene(df)
+                        last_row = df.loc[len(df.index)-1,:][3:]
+                        last_row = [items for items in last_row if isinstance(items, str)]
+                        thousand_sep, decimal_point = self.get_pointer(row = last_row)
+                        if bool(last_row):
+                            df = self.df_preprocess_string(df, thousand_sep=thousand_sep, decimal_point=decimal_point)
+                except:
+                    print(f"SpectroReader cannot open file with ({cur_separator}) separator")
+                if df.shape[1] > 1:
+                    break
             df = df.filter(regex=(".Quantity"))
             formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
             self.intensity_column_names = formatted_proteins_txt_columns
@@ -95,38 +83,25 @@ class SpectroReader(BaseReader):
         Indices are set to the value given in initialization (PG.Genes per default). Quantity columns are extracted.
         If selected imputed values are set to 0 and duplicate indices are renamed.
         """
+        df = pd.DataFrame()
         try:
             file_dir = self.ext_change(self.data_dir)[0]
         except IndexError:
             file_dir = []
-        separators = [",", "\t", ";"]
-        df = pd.DataFrame()
-        with open(file_dir, "r") as df_head:
-            head = [next(df_head) for x in range(4)]
-        breaker = False
-        for cur_separator in ["\t", ";", ","]:
-            h = head[0].split(cur_separator)
-            if (len(h) > 3):
-                for line in head[1:4]:
-                    l = line.split(cur_separator)
-                    l = l[3:]
-                    if bool(any("," in element for element in l)):
-                        try:
-                            df = pd.read_csv(file_dir, sep=cur_separator, decimal=",")
-                            breaker = True
-                            break
-                        except:
-                            print(f"Unable to open file with ({cur_separator}) separator and (,) decimal point")
-                if not breaker:
-                    try:
-                        df = pd.read_csv(file_dir, sep=cur_separator, decimal=".")
-                    except:
-                        print(f"Unable to open file with ({cur_separator}) separator and (.) decimal point")
-        if (df.shape[1] > 3):
-            for column in ["PG.ProteinGroups", "PG.Genes", "PG.ProteinDescriptions"]:
-                for row in df.index:
-                    df.loc[row, column] = df.loc[row, column].replace("!", ";")
-                    df.loc[row, column] = df.loc[row, column].replace("@", ",")
+        for cur_separator in [",", "\t", ";"]:
+            try:
+                df = pd.read_csv(file_dir, sep=cur_separator)
+                if df.columns[0] == 'PG.ProteinGroups':
+                    df = self.df_preprocess_split_gene(df)
+                    last_row = df.loc[len(df.index) - 1, :][3:]
+                    last_row = [items for items in last_row if isinstance(items, str)]
+                    thousand_sep, decimal_point = self.get_pointer(row=last_row)
+                    if bool(last_row):
+                        df = self.df_preprocess_string(df, thousand_sep=thousand_sep, decimal_point=decimal_point)
+            except:
+                print(f"SpectroReader cannot open file with ({cur_separator}) separator")
+            if df.shape[1] > 1:
+                break
         use_index = df[self.index_col]
         quant_cols = [col for col in df.columns if '.Quantity' in col]
         filt_cols = [col for col in df.columns if '.IsIdentified' in col]
@@ -234,3 +209,93 @@ class SpectroReader(BaseReader):
                 dictionary[parts[0]] += 1
             else:
                 dictionary[parts[0]] = final_value
+    def df_preprocess_split_gene(self, df):
+        '''
+        Used for initial processing of the dataframe. A row containing several gene names separated by semi-colon will be
+        split into several rows (one per gene) and appended to the dataframe. Numbers in the .Quantity and .IBAQ columns
+        were imported as strings by read_csv, hence will be converted back to numbers. Commas are interpreted as a decimal
+        point if the number string has 1 comma and as thousand separators if the string has more than 1.
+
+        Returns df after processing
+
+        Parameters:
+            df: SpectroReader dataframe (imported with __init__ and preprocess_protein()
+        '''
+        dupl_row = [row for row in df.index if ";" in df.loc[row,"PG.ProteinGroups"]]
+        for row in dupl_row:
+            cell_genes = df.loc[row, 'PG.ProteinGroups'].split(';')
+            for i in range(len(cell_genes)):
+                new_row = []
+                for cell in df.loc[row, :]:
+                    if isinstance(cell, str):
+                        if ';' in cell:
+                            new_row.append(cell.split(';')[i])
+                        else:
+                            new_row.append(cell)
+                    else:
+                        new_row.append(cell)
+                df.loc[len(df.index)] = new_row
+        df = df.drop(labels=dupl_row, axis=0)
+        df.index = range(len(df.index))
+        return df
+
+    def df_preprocess_string(self, df, thousand_sep=",", decimal_point=","):
+        '''
+        Used for initial processing of the dataframe if numbers were imported as string by read_csv. thousand_sep are interpreted as a decimal point if the number
+        string has 1 comma and as thousand separators if the string has more than 1.
+
+        Returns df after processing
+
+        Parameters:
+            df: SpectroReader dataframe after processing with df_preprocess_split_row()
+            thousand_sep: thousand separator
+            decimal_point: decimal point
+        '''
+        quantity_col = [col for col in df.columns if '.Quantity' in col]
+        ibaq_col = [col for col in df.columns if '.IBAQ' in col]
+        lfq_col = [col for col in df.columns if '.LFQ' in col]
+        col_to_float = ibaq_col + lfq_col
+        for row in df.index:
+            for col in quantity_col:
+                try:
+                    try:  # if executed (i.e. string has less than 2 thousand_sep) then the thousand_sep is a decimal point
+                        df.loc[row, col] = float(df.loc[row, col].replace(decimal_point, '.'))
+                    except:  # otherwise thousand_sep are thousand separators and need to be removed
+                        df.loc[row, col] = float(df.loc[row, col].replace(thousand_sep, ''))
+                except:
+                    pass  # pass if cell is not string type
+            for col in col_to_float:  # convert data from string to float
+                try:
+                    df.loc[row, col] = float(df.loc[row, col].replace(decimal_point, '.'))
+                except:
+                    pass  # pass if cell is not string type
+        return df
+    def get_pointer(self, row):
+        '''
+        Identify the thousand separator and decimal pointer in the row
+        Parameter:
+            row: a row containing only string variables
+        ------------
+        Returns:
+            thousand separator and decimal point (if not found it will return ',')
+        '''
+        thousand_sep, decimal_point = ',', ','
+        break1, break2 = False, False
+        for items in row:
+            first_comma, last_comma = items.find(","), items.rfind(",")
+            first_dot, last_dot = items.find("."), items.rfind(".")
+            if not break1:
+                if first_comma != last_comma:
+                    break1 = True
+                elif first_dot != last_dot:
+                    thousand_sep = "."
+                    break1 = True
+            if not break2:
+                if first_comma == last_comma and first_comma > -1:
+                    break2 = True
+                elif first_dot == last_dot and first_dot > -1:
+                    decimal_point = "."
+                    break2 = True
+            if break1 and break2:
+                break
+        return thousand_sep, decimal_point
