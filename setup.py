@@ -1,9 +1,9 @@
 from setuptools import setup, find_packages
 
-with open("README.md", "r") as fh:
+with open("README.md", "r", encoding = 'utf-8') as fh:
     long_description = fh.read()
 
-with open("mspypeline/version.py", "r") as f:
+with open("mspypeline/version.py", "r", encoding = 'utf-8') as f:
     version = f.readline().split()[-1].strip('"')
 
 setup(
