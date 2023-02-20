@@ -3,6 +3,7 @@ from msilib.schema import Error
 import os
 import re
 import pandas as pd
+from pandas.api.types import is_numeric_dtype
 import logging
 from collections import defaultdict
 from mspypeline.core.MSPPlots import SpectroPlotter
@@ -55,12 +56,7 @@ class SpectroReader(BaseReader):
                 try:
                     df = pd.read_csv(file_dir, sep=cur_separator)
                     if df.columns[0] == 'PG.ProteinGroups':
-                        df = self.df_preprocess_split_gene(df)
-                        last_row = df.loc[len(df.index)-1,:][3:]
-                        last_row = [items for items in last_row if isinstance(items, str)]
-                        thousand_sep, decimal_point = self.get_pointer(row = last_row)
-                        if bool(last_row):
-                            df = self.df_preprocess_string(df, thousand_sep=thousand_sep, decimal_point=decimal_point)
+                        df = self.preprocess_df(df)
                 except:
                     print(f"SpectroReader cannot open file with ({cur_separator}) separator")
                 if df.shape[1] > 1:
@@ -92,12 +88,7 @@ class SpectroReader(BaseReader):
             try:
                 df = pd.read_csv(file_dir, sep=cur_separator)
                 if df.columns[0] == 'PG.ProteinGroups':
-                    df = self.df_preprocess_split_gene(df)
-                    last_row = df.loc[len(df.index) - 1, :][3:]
-                    last_row = [items for items in last_row if isinstance(items, str)]
-                    thousand_sep, decimal_point = self.get_pointer(row=last_row)
-                    if bool(last_row):
-                        df = self.df_preprocess_string(df, thousand_sep=thousand_sep, decimal_point=decimal_point)
+                    df = self.preprocess_df(df)
             except:
                 print(f"SpectroReader cannot open file with ({cur_separator}) separator")
             if df.shape[1] > 1:
@@ -209,19 +200,16 @@ class SpectroReader(BaseReader):
                 dictionary[parts[0]] += 1
             else:
                 dictionary[parts[0]] = final_value
-    def df_preprocess_split_gene(self, df):
+    
+    def preprocess_df(self, df):
         '''
-        Used for initial processing of the dataframe. A row containing several gene names separated by semi-colon will be
-        split into several rows (one per gene) and appended to the dataframe. Numbers in the .Quantity and .IBAQ columns
-        were imported as strings by read_csv, hence will be converted back to numbers. Commas are interpreted as a decimal
-        point if the number string has 1 comma and as thousand separators if the string has more than 1.
+        Initial processing of the dataframe if numbers were imported as string by read_csv. Also process rows with
+        multiple protein names.
 
         Returns df after processing
-
-        Parameters:
-            df: SpectroReader dataframe (imported with __init__ and preprocess_protein()
         '''
-        dupl_row = [row for row in df.index if ";" in df.loc[row,"PG.ProteinGroups"]]
+        # process rows with multiple protein names
+        dupl_row = [row for row in df.index if ";" in df.loc[row, "PG.ProteinGroups"]]
         for row in dupl_row:
             cell_genes = df.loc[row, 'PG.ProteinGroups'].split(';')
             for i in range(len(cell_genes)):
@@ -237,65 +225,28 @@ class SpectroReader(BaseReader):
                 df.loc[len(df.index)] = new_row
         df = df.drop(labels=dupl_row, axis=0)
         df.index = range(len(df.index))
-        return df
-
-    def df_preprocess_string(self, df, thousand_sep=",", decimal_point=","):
-        '''
-        Used for initial processing of the dataframe if numbers were imported as string by read_csv. thousand_sep are interpreted as a decimal point if the number
-        string has 1 comma and as thousand separators if the string has more than 1.
-
-        Returns df after processing
-
-        Parameters:
-            df: SpectroReader dataframe after processing with df_preprocess_split_row()
-            thousand_sep: thousand separator
-            decimal_point: decimal point
-        '''
-        quantity_col = [col for col in df.columns if '.Quantity' in col]
-        ibaq_col = [col for col in df.columns if '.IBAQ' in col]
-        lfq_col = [col for col in df.columns if '.LFQ' in col]
-        col_to_float = ibaq_col + lfq_col
-        for row in df.index:
-            for col in quantity_col:
-                try:
-                    try:  # if executed (i.e. string has less than 2 thousand_sep) then the thousand_sep is a decimal point
-                        df.loc[row, col] = float(df.loc[row, col].replace(decimal_point, '.'))
-                    except:  # otherwise thousand_sep are thousand separators and need to be removed
-                        df.loc[row, col] = float(df.loc[row, col].replace(thousand_sep, ''))
-                except:
-                    pass  # pass if cell is not string type
-            for col in col_to_float:  # convert data from string to float
-                try:
-                    df.loc[row, col] = float(df.loc[row, col].replace(decimal_point, '.'))
-                except:
-                    pass  # pass if cell is not string type
-        return df
-    def get_pointer(self, row):
-        '''
-        Identify the thousand separator and decimal pointer in the row
-        Parameter:
-            row: a row containing only string variables
-        ------------
-        Returns:
-            thousand separator and decimal point (if not found it will return ',')
-        '''
-        thousand_sep, decimal_point = ',', ','
-        break1, break2 = False, False
-        for items in row:
+        # identify thousand separator
+        last_row = df.loc[len(df.index) - 1, :][3:]
+        thousand_sep = ','
+        for items in [items for items in last_row if isinstance(items, str)]:
             first_comma, last_comma = items.find(","), items.rfind(",")
             first_dot, last_dot = items.find("."), items.rfind(".")
-            if not break1:
-                if first_comma != last_comma:
-                    break1 = True
-                elif first_dot != last_dot:
-                    thousand_sep = "."
-                    break1 = True
-            if not break2:
-                if first_comma == last_comma and first_comma > -1:
-                    break2 = True
-                elif first_dot == last_dot and first_dot > -1:
-                    decimal_point = "."
-                    break2 = True
-            if break1 and break2:
+            if first_comma != last_comma:
                 break
-        return thousand_sep, decimal_point
+            elif first_dot != last_dot:
+                thousand_sep = "."
+                break
+        # convert non-numeric intensities to numeric:
+
+        def convert_string(x):
+            try:
+                return float(x.replace(',', '.'))
+            except ValueError:
+                return float(x.replace(thousand_sep, ''))
+            except AttributeError:
+                return x
+        for col in [col for col in df.columns if '.Quantity' in col or '.IBAQ' in col or '.iBAQ' in col or '.LFQ' in col]:
+            if not is_numeric_dtype(df[col]):
+                df[col] = df[col].apply(lambda x: convert_string(x))
+
+        return df
