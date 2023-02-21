@@ -275,10 +275,10 @@ class MSPGUI(tk.Tk):
                       "How many proteins were detected in each of my samples and in total for each group?", tab = tab2)
         self.plots_per_section +=1
         self.plot_row("Venn diagrams", "venn_results",
-                      "How large is the intersection of detected proteins of my samples in each group? How many proteins are uniquely detected in a sample?", tab = tab2)
+                      "How large is the intersection of detected proteins of my samples in each group?\n How many proteins are uniquely detected in a sample?", tab = tab2)
         self.plots_per_section +=1
         self.plot_row("Group diagrams", "venn_groups",
-                      "How large is the intersection of detected proteins between different groups? How many proteins are uniquely detected in a group?", tab = tab2)
+                      "How large is the intersection of detected proteins between different groups?\n How many proteins are uniquely detected in a group?", tab = tab2)
         self.plots_per_section +=1
         self.plot_row("PCA overview", "pca_overview",
                       "How similar are my samples? Do samples cluster together?", tab = tab2)
@@ -310,7 +310,7 @@ class MSPGUI(tk.Tk):
         self.plot_row("Go analysis", "go_analysis",
                       "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
         self.plot_row("Volcano plot (R)", "r_volcano",
-                      "Which proteins are significantly higher or lower in intensity comparing two groups? Which proteins are detected only in one group and not in the other?", tab = tab3)
+                      "Which proteins are significantly higher or lower in intensity comparing two groups?\n Which proteins are detected only in one group and not in the other?", tab = tab3)
         
         total_length = self.heading_length + self.number_of_plots
 
