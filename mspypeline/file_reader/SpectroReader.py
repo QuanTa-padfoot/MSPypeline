@@ -58,8 +58,9 @@ class SpectroReader(BaseReader):
                     if df.columns[0] == 'PG.ProteinGroups':
                         df = self.preprocess_df(df)
                 except:
-                    print(f"SpectroReader cannot open file with ({cur_separator}) separator")
+                    print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
                 if df.shape[1] > 1:
+                    print("SpectroReader opened file, yay :D")
                     break
             df = df.filter(regex=(".Quantity"))
             formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
@@ -90,8 +91,9 @@ class SpectroReader(BaseReader):
                 if df.columns[0] == 'PG.ProteinGroups':
                     df = self.preprocess_df(df)
             except:
-                print(f"SpectroReader cannot open file with ({cur_separator}) separator")
+                print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
             if df.shape[1] > 1:
+                print("SpectroReader opened file, yay :D")
                 break
         use_index = df[self.index_col]
         quant_cols = [col for col in df.columns if '.Quantity' in col]
@@ -242,7 +244,8 @@ class SpectroReader(BaseReader):
             try:
                 return float(x.replace(',', '.'))
             except ValueError:
-                return float(x.replace(thousand_sep, ''))
+                a = x.replace(thousand_sep, '')
+                return float(a.replace(',', '.'))
             except AttributeError:
                 return x
         for col in [col for col in df.columns if '.Quantity' in col or '.IBAQ' in col or '.iBAQ' in col or '.LFQ' in col]:
