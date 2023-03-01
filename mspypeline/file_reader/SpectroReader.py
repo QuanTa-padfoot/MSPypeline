@@ -20,7 +20,7 @@ class SpectroReader(BaseReader):
       and whether to rename duplicate row indices.
     """
     name = "spectroReader"
-    required_files = ['.xls or .csv file']
+    required_files = ['.xls, .tsv, or .csv file']
     plotter = SpectroPlotter
     use_imputed = False
     format_doubleindx = False
@@ -129,7 +129,7 @@ class SpectroReader(BaseReader):
                 new_filedir = os.path.join(data_dir, new_filename)
                 os.replace(old_filedir, new_filedir)
                 list_files.append(new_filedir)
-            elif file.endswith(".csv"):
+            elif file.endswith(".csv") or file.endswith(".tsv"):
                 list_files.append(os.path.join(data_dir, file))
         return(list_files)
 
