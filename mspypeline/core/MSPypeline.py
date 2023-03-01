@@ -59,7 +59,8 @@ class UIHandler:
         if gui and host_flask:
             raise ValueError("Can only specify one of host_flask and gui")
         if gui:
-            MSPGUI(file_dir=file_dir, yml_file=yml_file, loglevel=loglevel, configs=configs)
+            app = MSPGUI(file_dir=file_dir, yml_file=yml_file, loglevel=loglevel, configs=configs)
+            app.mainloop()
         elif host_flask:
             # TODO pass arguments to create app
             app = create_app()
@@ -328,7 +329,6 @@ class MSPGUI(tk.Tk):
         self.mspinit.configs.update(configs)
         self.update_yaml_options()
         self.resizable(False, False) 
-        self.mainloop()
 
     def style_handler(self):
         if self.tk.call("ttk::style", "theme", "use") == "azure-dark":
