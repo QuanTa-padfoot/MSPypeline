@@ -177,10 +177,10 @@ class BasePlotter:
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
         
         # solve issue of opening MatplotLib GUI outside a main thread
-        try:
-            plt.switch_backend('pdf')
-        except:
-            pass
+        #try:
+        #    plt.switch_backend('pdf')
+        #except:
+        #    pass
 
     @classmethod
     def from_MSPInitializer(cls, mspinit_instance: MSPInitializer, **kwargs) -> "BasePlotter":
