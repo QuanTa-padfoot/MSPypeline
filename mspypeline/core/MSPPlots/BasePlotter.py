@@ -176,11 +176,7 @@ class BasePlotter:
         # path for volcano plots
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
         
-        # solve issue of opening MatplotLib GUI outside a main thread
-        #try:
-        #    plt.switch_backend('pdf')
-        #except:
-        #    pass
+        
 
     @classmethod
     def from_MSPInitializer(cls, mspinit_instance: MSPInitializer, **kwargs) -> "BasePlotter":
@@ -250,6 +246,8 @@ class BasePlotter:
         """
         Creates all plots that where chosen/set to True in the settings "create plot" (see :ref:`default-yaml`).
         """
+        try: plt.switch_backend('agg')
+        except: pass
         global_settings = self.configs.get("global_settings", {})
         self.logger.debug(f"got global settings: %s", global_settings)
         for plot_name in self.possible_plots:
@@ -263,6 +261,8 @@ class BasePlotter:
                     dfs_to_use = [x.replace("_", "_normalized_") for x in dfs_to_use]
                     plot_settings.update({"dfs_to_use": dfs_to_use})
                 getattr(self, plot_name)(**plot_settings)
+        try: plt.switch_backend('pdf')
+        except: pass
         self.logger.info("Done creating plots")
 
     def add_intensity_column(self, option_name: str, name_in_file: str, name_in_plot: str,
