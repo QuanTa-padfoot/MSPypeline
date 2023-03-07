@@ -46,6 +46,7 @@ cd .\mspypeline
 .\setup.ps1
 ```
 
+*Note: The above commands do not work for some directories (such as C:) due to the operating system, thereby causing errors. In that case, I'd recommend changing the directory and do the setup above again. I've found `C:\Temp` to always work.
 After successful installation, the Powershell prompt will print:
 ```
 Please restart your computer.
@@ -58,6 +59,8 @@ Before using MSPypeline, you need to define the R file's location in the powersh
 ```
 $env:R_HOME = 'C:\Program Files\R\R-4.2.1'
 ```
+
+If you have a different version of R, simply replace `4.2.1` with your version.
 
 Now you can start the GUI:
 ```
@@ -73,7 +76,7 @@ Data files often use commas as decimal points and/or thousand separators, both o
 Samples should be named as follow: ***Group_Biological Replicate_Technical Replicate***. I'd recommend not having comma, tab, and semi-colon in the names since MSPypeline might wrongly interpret them as separator (and therefore induce an error).
 
 # Bug reporting
-This repository is under development, hence errors are likely to occur. Should an error occur, please report it to me at ***cong.ta@stud.uni-heidelberg.de***. In your email, please state:
+This repository is under development, hence errors are likely to occur. Should an error occur, please report it to me at either ***cong.ta@stud.uni-heidelberg.de*** or ***congquan.ta@dkfz-heidelberg.de***. In your email, please state:
 - What the error is
 - A step-by-step procedure leading to the error
 - (If applicable) the data file with which you encountered the error
