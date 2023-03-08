@@ -159,11 +159,21 @@ class MSPGUI(tk.Tk):
         create_tool_tip(go_proteins_label, "For a full list of Proteins see the Documentation."
                                            "\nCustom Gene Lists -> GO Terms")
         go_proteins_label.grid(row=5, column=0, sticky=tk.W, padx=5)
+        # Button for submitting customized GO gene lists
+        GO_button = ttk.Button(self, text='Upload file', width=10,
+                               command=lambda: self.upload_file(list_type='GO'))
+        create_tool_tip(GO_button, "Upload your GO gene list")
+        GO_button.grid(row=5, column=1, sticky=tk.W)
 
         pathways_label = ttk.Label(self, text="Pathway analysis lists")
         create_tool_tip(pathways_label, "For a full list of Proteins see the Documentation."
                                            "\nCustom Gene Lists -> Pathways")
         pathways_label.grid(row=7, column=0, sticky=tk.W, padx=5)
+        # Button for submitting customized pathway gene lists
+        pathways_button = ttk.Button(self, text='Upload file',width=10,
+                                command=lambda: self.upload_file(list_type='pathways'))
+        create_tool_tip(pathways_button, "Upload your pathways gene list")
+        pathways_button.grid(row=7, column=1, sticky=tk.W)
 
         design_label = ttk.Label(self, text="Sample names")
         create_tool_tip(design_label, "Inferred sample names of the experiment")
@@ -330,6 +340,34 @@ class MSPGUI(tk.Tk):
         self.update_yaml_options()
         self.resizable(False, False) 
 
+    def upload_file(self, list_type: str):
+        '''To upload custom gene list for GO and pathways analysis'''
+        filenames = filedialog.askopenfilenames(initialdir=self.dir_text,filetypes=[('Text Files', '*.txt')])
+        targetPath = os.path.realpath(__file__)
+        targetPath = targetPath.split(sep='mspypeline\core')[0]
+        if list_type == 'GO':
+            targetPath = targetPath + 'mspypeline\config\go_terms'
+        elif list_type == 'pathways':
+            targetPath = targetPath + 'mspypeline\config\pathways'
+        for filedir in filenames:
+            if filedir is not None:
+                filename = filedir.replace('\\', '/')
+                filename_nodir = filename.split('/')
+                filename_nodir = filename_nodir[len(filename_nodir) - 1]
+                target_filedir = os.path.join(targetPath, filename_nodir)
+                target_filedir = target_filedir.replace('\\', '/')
+
+                # Create a list of gene names, remove duplicates and sort the list
+                gene_list = []
+                for line in open(filename, 'r').readlines():
+                    if line not in gene_list and line != '\n':
+                        gene_list.append(line)
+
+                # Write gene_list to the new file
+                with open(target_filedir, 'w') as target:
+                    for line in gene_list:
+                        target.write(line)
+    
     def style_handler(self):
         if self.tk.call("ttk::style", "theme", "use") == "azure-dark":
             # Set light theme
