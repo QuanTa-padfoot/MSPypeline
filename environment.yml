@@ -7,7 +7,7 @@ dependencies:
   - numpy=1.23.0
   - pandas=1.5.0
   - scipy=1.9.1
-  - rpy2=3.5.7
+  - rpy2=3.4.2
   - tzlocal=4.2
   - ruamel_yaml=0.15.80
   - matplotlib=3.6.0
