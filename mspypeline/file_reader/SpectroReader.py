@@ -166,26 +166,10 @@ class SpectroReader(BaseReader):
         for col in cols:
             cur_col = col.split(" ")[1]
             cur_col = cur_col.split(".")[0]
-            cur_col = cur_col.split("_")
-            print(cur_col)
-            if len(cur_col)<=2:
-                new_col = cur_col[0] + "_" + cur_col[1]
-            elif len(cur_col) ==3:
-                new_col = cur_col[0] + "_" + cur_col[1] + "_" + cur_col[2]
-            else:
-                cur_col = cur_col[2:]
-                print(cur_col)
-                if len(cur_col)==3:
-                    new_col = "_".join(cur_col)
-                elif len(cur_col)==5:
-                    new_col = cur_col[0] + cur_col[1] + "_" + cur_col[2] + "_" + cur_col[3] + cur_col[4]
-                elif len(cur_col)==4:
-                    if("rep" in cur_col[3]):
-                        new_col = cur_col[0] + "_" + cur_col[1] + "_" + cur_col[2] + cur_col[3]
-                    else:
-                        new_col = cur_col[0] + cur_col[1] + "_" + cur_col[2] + "_" + cur_col[3]
-            processed_cols.append(new_col)
-            self.dictizeString(new_col, new_col, analysis_design)
+            new_col = cur_col.split("_")
+            print(new_col)
+            processed_cols.append(cur_col)
+            self.dictizeString(cur_col, cur_col, analysis_design)
         return processed_cols, analysis_design
             
 
