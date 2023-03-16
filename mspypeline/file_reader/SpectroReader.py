@@ -96,28 +96,36 @@ class SpectroReader(BaseReader):
                 print("SpectroReader opened file, yay :D")
                 break
         use_index = df[self.index_col]
-        quant_cols = [col for col in df.columns if '.Quantity' in col]
-        filt_cols = [col for col in df.columns if '.IsIdentified' in col]
-        quantfilt_cols = quant_cols + filt_cols
-        keyf = lambda text: text.split(".")[0]
-        grouped_cols = [list(items) for gr, items in groupby(sorted(quantfilt_cols), key=keyf)]
-        for i in range(0, len(grouped_cols)):
-            df.loc[pd.isna(df[grouped_cols[i][1]]) == True, grouped_cols[i][0]]=False
-
-        missing_map  = df.filter(regex=(".IsIdentified")).replace({"Filtered": False, "True": True, "False": False})
-        df = df.filter(regex=(".Quantity"))
-        df = df.replace({"Filtered": float(0)}).fillna(0)
-        
-        use_cols = ["Intensity " + col for col in self.intensity_column_names]
-        df.columns = use_cols
-        if self.use_imputed is False:
-            df = pd.DataFrame(df.values * missing_map.values, columns=df.columns, index=df.index)
-            
         if self.format_double_indx:
             use_index = self.format_double_indx(use_index)
         df.set_index(use_index, drop=False, inplace=True)
-        df.index = df.index.fillna("nan")
-        return df
+        missing_map = df.filter(regex=(".IsIdentified")).replace({"Filtered": False, "True": True, "False": False})
+        missing_map.sort_index(axis=1, inplace = True)
+        missing_map.fillna(False, inplace = True)
+        df_result = None
+        for intensity in ['.Quantity', '.LFQ', '.IBAQ']:
+            quant_cols = [col for col in df.columns if intensity in col]
+            if quant_cols != []:
+                df1 = df.filter(regex=(intensity))
+                df1.sort_index(axis=1, inplace = True)
+                df1 = df1.replace({"Filtered": float(0)}).fillna(0)
+                use_cols = [col.split(' ')[1] for col in df1.columns]
+                if intensity == '.Quantity':
+                    use_cols = ["Intensity " + col for col in use_cols]
+                elif intensity == '.IBAQ':
+                    use_cols = ["iBAQ " + col for col in use_cols]
+                elif intensity == '.LFQ':
+                    use_cols = ["LFQ intensity " + col for col in use_cols]
+                use_cols = [col.split('.raw')[0] for col in use_cols]
+                df1.columns = use_cols
+                if self.use_imputed is False:
+                    df1 = pd.DataFrame(df1.values * missing_map.values, columns=df1.columns, index=df1.index)
+                if df_result is None:
+                    df_result = df1
+                else:
+                    df_result = df_result.join(df1)
+        df_result.index = df.index.fillna("nan")
+        return df_result
 
     def ext_change(self, data_dir):
         list_files=[]
@@ -165,7 +173,7 @@ class SpectroReader(BaseReader):
         analysis_design = {}
         for col in cols:
             cur_col = col.split(" ")[1]
-            cur_col = cur_col.split(".")[0]
+            cur_col = cur_col.split(".raw")[0]
             new_col = cur_col.split("_")
             print(new_col)
             processed_cols.append(cur_col)
