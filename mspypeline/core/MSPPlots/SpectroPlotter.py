@@ -58,7 +58,7 @@ class SpectroPlotter(BasePlotter):
     def from_MSPInitializer(cls, mspinit_instance: MSPInitializer, **kwargs):
         default_kwargs = dict(
             intensity_entries = (("raw", "Intensity ", "Intensity"), ("lfq", "LFQ intensity ", "LFQ intensity"),
-                                ("ibaq", "iBAQ", "iBAQ intensity")),
+                                ("ibaq", "iBAQ ", "iBAQ intensity")),
             intensity_df_name="proteins",
             required_reader="spectroReader"
         )
