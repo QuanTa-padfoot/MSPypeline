@@ -23,7 +23,7 @@ setup(
         "numpy>=1.17.4",
         "pandas>=1.0.0",
         "scipy>=1.3.1",
-        "rpy2>=3.5.10",
+        "rpy2==3.4.5",
         "tzlocal>=2.0.0",
         #"ruamel_yaml>=0.15.46",
         "matplotlib>=3.1.1",
