@@ -100,14 +100,12 @@ class SpectroReader(BaseReader):
             use_index = self.format_double_indx(use_index)
         df.set_index(use_index, drop=False, inplace=True)
         missing_map = df.filter(regex=(".IsIdentified")).replace({"Filtered": False, "True": True, "False": False})
-        missing_map.sort_index(axis=1, inplace = True)
         missing_map.fillna(False, inplace = True)
         df_result = None
         for intensity in ['.Quantity', '.LFQ', '.IBAQ']:
             quant_cols = [col for col in df.columns if intensity in col]
             if quant_cols != []:
                 df1 = df.filter(regex=(intensity))
-                df1.sort_index(axis=1, inplace = True)
                 df1 = df1.replace({"Filtered": float(0)}).fillna(0)
                 use_cols = [col.split(' ')[1] for col in df1.columns]
                 if intensity == '.Quantity':
