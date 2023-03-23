@@ -216,6 +216,7 @@ class SpectroReader(BaseReader):
                         new_row.append(cell)
                 df.loc[len(df.index)] = new_row
         df = df.drop(labels=dupl_row, axis=0)
+        df["PG.Genes"] = df["PG.Genes"].fillna(df["PG.ProteinGroups"])
         df.index = range(len(df.index))
         # identify thousand separator
         last_row = df.loc[len(df.index) - 1, :][3:]
