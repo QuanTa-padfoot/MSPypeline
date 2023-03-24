@@ -98,4 +98,9 @@ plot_r_volcano_settings:
   levels: []
   adj_pval: false # should the adjusted p-val be used? (can be "true" or "false")
 
+plot_r_timecourse_FC_settings:
+  create_plot: false
+  dfs_to_use: []
+  levels: []
+
 has_groups: false
