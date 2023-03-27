@@ -179,6 +179,11 @@ class BasePlotter:
         # path for timecourse FC plots
         self.file_dir_timecourse_FC = os.path.join(self.start_dir, "timecourse FC")
         
+        # install r packages for volcano and timecourse plots
+        from mspypeline.helpers.Utils import install_r_dependencies
+        r_package_names = ("BiocManager", )
+        r_bioconducter_package_names = ("limma", )
+        install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
     @classmethod
     def from_MSPInitializer(cls, mspinit_instance: MSPInitializer, **kwargs) -> "BasePlotter":
@@ -1296,11 +1301,6 @@ class BasePlotter:
             analysis, *"unique_g1"* and *"unique_g2"* to Series containing the unique protein intensities per group
 
         """
-        # install r packages
-        from mspypeline.helpers.Utils import install_r_dependencies
-        r_package_names = ("BiocManager", )
-        r_bioconducter_package_names = ("limma", )
-        install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
         # import r interface package
         import rpy2.robjects as ro
