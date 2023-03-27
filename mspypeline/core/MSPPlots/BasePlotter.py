@@ -88,7 +88,8 @@ class BasePlotter:
         "plot_relative_std", "plot_rank", "plot_pathway_analysis",
         "plot_scatter_replicates", "plot_experiment_comparison", "plot_go_analysis", "plot_venn_results",
         "plot_venn_groups", "plot_r_volcano", "plot_pca_overview",
-        "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers"
+        "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers",
+        "plot_r_timecourse_FC"
     ]
 
     def __init__(
@@ -175,7 +176,8 @@ class BasePlotter:
         self.file_dir_go_analysis = os.path.join(self.start_dir, "go_analysis")
         # path for volcano plots
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
-        
+        # path for timecourse FC plots
+        self.file_dir_timecourse_FC = os.path.join(self.start_dir, "timecourse FC")
         
 
     @classmethod
@@ -1422,6 +1424,23 @@ class BasePlotter:
                         plots.append(plot)
             if plot_once:
                 break
+        return plots
+    
+    def get_r_timecourse_FC_data(self, df_to_use: str):
+        pass
+    
+    @validate_input
+    def plot_r_timecourse_FC(self, dfs_to_use: Union[str, Iterable[str]], **kwargs):
+        # import r packages
+        import rpy2.robjects as ro
+        from rpy2.robjects import pandas2ri
+        from rpy2.robjects.conversion import localconverter
+
+        # allow conversion of pd objects to r
+        pandas2ri.activate()
+        plots = []
+        for df_to_use in dfs_to_use:
+            data_input = self.all_tree_dict[df_to_use]
         return plots
 
     def get_pca_data(self, df_to_use: str, level: int, n_components: int = 2, fill_value: float = 0,
