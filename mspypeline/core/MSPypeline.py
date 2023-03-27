@@ -322,6 +322,9 @@ class MSPGUI(tk.Tk):
                       "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
         self.plot_row("Volcano plot (R)", "r_volcano",
                       "Which proteins are significantly higher or lower in intensity comparing two groups?\n Which proteins are detected only in one group and not in the other?", tab = tab3)
+        self.plot_row("Plot not implemented yet", "r_timecourse_FC",
+                      "What is the dynamics of the protein level across several condition?\n Genes to be plotted are detected from selected GO and Pathway gene lists",
+                      tab=tab3)
         
         total_length = self.heading_length + self.number_of_plots
 
