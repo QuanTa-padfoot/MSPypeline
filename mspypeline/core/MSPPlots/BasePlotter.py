@@ -176,13 +176,13 @@ class BasePlotter:
         self.file_dir_go_analysis = os.path.join(self.start_dir, "go_analysis")
         # path for volcano plots
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
-        # path for timecourse FC plots
-        self.file_dir_timecourse_FC = os.path.join(self.start_dir, "timecourse FC")
-        
+        # path for timecourse plots
+        self.file_dir_timecourse = os.path.join(self.start_dir, "timecourse")
+
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
-        r_package_names = ("BiocManager", )
-        r_bioconducter_package_names = ("limma", )
+        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats",)
+        r_bioconducter_package_names = ("limma", "MBQN", "preprocessCore", "EnhancedVolcano")
         install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
     @classmethod
