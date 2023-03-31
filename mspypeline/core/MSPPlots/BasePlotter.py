@@ -89,7 +89,7 @@ class BasePlotter:
         "plot_scatter_replicates", "plot_experiment_comparison", "plot_go_analysis", "plot_venn_results",
         "plot_venn_groups", "plot_r_volcano", "plot_pca_overview",
         "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers",
-        "plot_r_timecourse_FC"
+        "plot_r_timecourse"
     ]
 
     def __init__(
@@ -1426,23 +1426,120 @@ class BasePlotter:
                 break
         return plots
     
-    def get_r_timecourse_FC_data(self, df_to_use: str):
-        pass
-    
+    def get_r_timecourse_data(self, df_to_use: str, genelist_name: str, genelist_type: str, timematch_norm: str):
+        plot_title = f"{genelist_name}, samples "
+        for sample in self.configs["plot_r_timecourse_settings"].get("samples_to_plot"):
+            plot_title += f"{sample},"
+        norm_sample = self.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
+        if norm_sample != "None":
+            plot_title += f"normed_by {norm_sample} "
+            if timematch_norm:
+                plot_title += "per timepoint"
+        if self.configs.get("selected_normalizer") is None or self.configs.get("selected_normalizer") == "None":
+            plot_title += f"_{df_to_use}"
+        else:
+            normalizer = self.configs.get("selected_normalizer")
+            plot_title += f"_{normalizer}_{df_to_use}"
+        genelist = []
+        genelistPath = os.path.realpath(__file__)
+        genelistPath = genelistPath.split(sep='mspypeline\core')[0]
+        if genelist_type == 'GO':
+            genelistPath = genelistPath + 'mspypeline\config\go_terms'
+        elif genelist_type == 'pathways':
+            genelistPath = genelistPath + 'mspypeline\config\pathways'
+        if genelist_name.endswith(".txt"):
+            genelistPath = genelistPath + f'\{genelist_name}'
+        else:
+            genelistPath = genelistPath + f'\{genelist_name}.txt'
+        with open(genelistPath, 'r') as file:
+            for gene in file:
+                genelist.append(gene.replace("\n", ""))
+        return plot_title, genelist
+
     @validate_input
-    def plot_r_timecourse_FC(self, dfs_to_use: Union[str, Iterable[str]], **kwargs):
+    def plot_r_timecourse(self, dfs_to_use: Union[str, Iterable[str]], **kwargs):
+        # return empty if no gene list was selected
+        if self.go_analysis_gene_names == {} and self.interesting_proteins == {}:
+            self.logger.warning("No gene list selected! Select a gene list before plotting")
+            return
         # import r packages
         import rpy2.robjects as ro
         from rpy2.robjects import pandas2ri
         from rpy2.robjects.conversion import localconverter
+        # import R script for plotting timecourse
+        r_script_path = os.path.realpath(__file__).replace('BasePlotter.py', 'r_timecourse_plot.R')
+        r_script_path = r_script_path.replace('\\', '/')
+        # import the r_timecourse_plot.R script
+        ro.r(f'''source("{r_script_path}")''')
+        # get plot settings from configs
+        plot_errorbar = self.configs["plot_r_timecourse_settings"].get("plot_errorbar")
+        align_yaxis =self.configs["plot_r_timecourse_settings"].get("align_yaxis")
+        match_time_norm = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
+        plotdir = self.file_dir_timecourse.replace('\\', '/')
+        ctrl_condition = self.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
+        print(f"Ctrl condition {ctrl_condition}")
+        plot_conditions = []
+        for sample in self.configs["plot_r_timecourse_settings"].get("samples_to_plot"):
+            plot_conditions.append(sample)
+        # create a folder for storing plots if folder is absent
+        if not os.path.exists(self.file_dir_timecourse):
+            os.makedirs(self.file_dir_timecourse)
 
-        # allow conversion of pd objects to r
-        pandas2ri.activate()
-        plots = []
+        ro.globalenv['plot_conditions'] = ro.StrVector(plot_conditions)
+        ro.globalenv['ctrl_condition'] = ctrl_condition
+
+        ro.globalenv['plotdir'] = plotdir
+        ro.globalenv['plot_errorbar'] = plot_errorbar
+        ro.globalenv['align_yaxis'] = align_yaxis
+        ro.globalenv['match_time_norm'] = match_time_norm
         for df_to_use in dfs_to_use:
-            data_input = self.all_tree_dict[df_to_use]
-        return plots
-
+            # allow conversion of pd objects to r
+            pandas2ri.activate()
+            if df_to_use.endswith("_log2"):
+                logscale = True
+            else:
+                logscale = False
+            with localconverter(ro.default_converter + pandas2ri.converter):
+                data_input = ro.conversion.py2rpy(self.all_tree_dict[df_to_use].aggregate(method=None))
+            # define variables in R environment
+            ro.globalenv['df'] = data_input
+            ro.globalenv['logscale'] = logscale
+            ro.globalenv['df_to_use'] = df_to_use
+            if self.go_analysis_gene_names != {}:
+                for go_terms in self.go_analysis_gene_names:
+                    plot_title, genelist = self.get_r_timecourse_data(df_to_use= df_to_use,
+                                                                      genelist_name=go_terms,
+                                                                      genelist_type="GO",
+                                                                      timematch_norm= match_time_norm)
+                    # Define the remaining variables in R environment
+                    ro.globalenv['genelist'] = ro.StrVector(genelist)
+                    ro.globalenv['plot_title'] = plot_title
+                    # plot fold change if a ctrl_condition was specified, or plot fold change if ctrl_condition is specified
+                    if ctrl_condition == "None":
+                        ro.r(
+                            '''r_time_course_intensity(df, genelist, plot_conditions, logscale, plot_errorbar, 
+                            plot_title, plotdir, align_yaxis, df_to_use)''')
+                    else:
+                        ro.r('''r_time_course_FC(df, genelist, plot_conditions, ctrl_condition, logscale, plot_errorbar,
+                                                 plot_title, plotdir, match_time_norm, align_yaxis, df_to_use)''')
+            if self.interesting_proteins != {}:
+                for pathways in self.interesting_proteins:
+                    plot_title, genelist = self.get_r_timecourse_data(df_to_use=df_to_use,
+                                                                      genelist_name=pathways,
+                                                                      genelist_type="pathways",
+                                                                      timematch_norm= match_time_norm)
+                    # Define the remaining variables in R environment
+                    ro.globalenv['genelist'] = ro.StrVector(genelist)
+                    ro.globalenv['plot_title'] = plot_title
+                    # plotting time!
+                    if ctrl_condition == "None":
+                        ro.r(
+                            '''r_time_course_intensity(df, genelist, plot_conditions, logscale, plot_errorbar, 
+                            plot_title, plotdir, align_yaxis, df_to_use)''')
+                    else:
+                        ro.r('''r_time_course_FC(df, genelist, plot_conditions, ctrl_condition, logscale, plot_errorbar,
+                                                 plot_title, plotdir, match_time_norm, align_yaxis, df_to_use)''')
+    
     def get_pca_data(self, df_to_use: str, level: int, n_components: int = 2, fill_value: float = 0,
                      no_missing_values: bool = True, fill_na_before_norm: bool = False, **kwargs):
         """
