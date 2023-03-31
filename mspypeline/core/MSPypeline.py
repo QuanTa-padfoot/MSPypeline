@@ -325,7 +325,15 @@ class MSPGUI(tk.Tk):
         self.plot_row("Plot not implemented yet", "r_timecourse_FC",
                       "What is the dynamics of the protein level across several condition?\n Genes to be plotted are detected from selected GO and Pathway gene lists",
                       tab=tab3)
-        
+        self.plot_row("Time-course intensities (R)", "r_timecourse",
+                      "What is the dynamics of the protein level across several condition?\n Genes to be plotted are detected from selected GO and Pathway gene lists",
+                      tab=tab3)
+
+        # button for customizing sample selection for timecourse FC
+        norm_method_label = ttk.Label(tab3, text="Settings for plotting timecourse:", font="Helvetica 10 bold")
+        norm_method_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
+        self.customize_sample_button(plot_text="timecourse", tab=tab3)
+        total_length = self.heading_length + self.number_of_plots
         total_length = self.heading_length + self.number_of_plots
 
         
@@ -621,7 +629,119 @@ class MSPGUI(tk.Tk):
 
             self.number_of_plots += 1
 
+        def customize_sample_button(self, plot_text: str = None, tab = None):
+        if tab == None:
+            col = 0
+            row = self.heading_length + self.number_of_plots
+            customize = ttk.Button(self, text="Customize")
+            customize.grid(row=row, column=col, sticky=tk.W, padx=5)
 
+            self.number_of_plots += 1
+        else:
+            col = 1
+            row = self.heading_length + self.number_of_plots
+            if plot_text == "timecourse":
+                customize = ttk.Button(tab, text="Customize", command= lambda: self.customize_timecourse())
+                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
+
+            self.number_of_plots += 1
+
+    def customize_timecourse(self):
+        '''Popup window to select samples for plotting the timecourse'''
+        window = tk.Toplevel()
+        window.geometry("500x400")
+        window.title("Selecting samples for plotting timecourse Fold Change")
+        all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+
+        # Remove the last two levels in sample display
+        all_sample = []
+        for i in range(len(all_replicates)):
+            sample = all_replicates[i].split("_")
+            del sample[-1]
+            del sample[-1]
+            new_sample = "_".join(sample)
+            if new_sample not in all_sample and new_sample != "":
+                all_sample.append(new_sample)
+
+        if all_sample == []:
+            note = tk.Label(window, text="Samples not found! Check that the directory to the data is correct")
+            note.grid(row=0,column=0)
+            note1 = tk.Label(window, text="In addition, samples must have at least 3 levels, \nwith the second to last one displaying timepoints")
+            note1.grid(row=1, column=0)
+        else:
+
+            plot_errorbar = tk.IntVar(value=int(self.mspinit.configs["plot_r_timecourse_settings"].get("plot_errorbar")))
+            errorbar_option = tk.Checkbutton(window, text="Plot errorbars", variable= plot_errorbar)
+            errorbar_option.grid(row=0, column=0, sticky= tk.W)
+
+            align_yaxis = tk.IntVar(value=int(self.mspinit.configs["plot_r_timecourse_settings"].get("align_yaxis")))
+            align_yaxis_option = tk.Checkbutton(window, text="Align y axes", variable= align_yaxis)
+            align_yaxis_option.grid(row=1, column=0, sticky= tk.W)
+
+            normalizing_sample_label = tk.Label(window, text="Select a sample to normalize below for plotting fold change\nOr choose None for plotting protein intensities")
+            normalizing_sample_label.grid(row=2, column=0)
+            normalizing_sample = tk.Listbox(window, selectmode="single", height=5,
+                                       width=len(max(all_sample, key=len))+2)
+            normalizing_sample.configure(exportselection=False)
+            normalizing_sample.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=20)
+
+            time_match_norm = tk.IntVar(
+                value=int(self.mspinit.configs["plot_r_timecourse_settings"].get("matching_time_normalization")))
+            time_match_norm_option = tk.Checkbutton(window, text="Normalize by each time point instead of the first time point\nInvalid if does not select sample to normalize", variable=time_match_norm)
+            time_match_norm_option.grid(row=4, column=0, sticky = tk.W)
+
+            sample_list_label = tk.Label(window, text="Select all samples to plot below")
+            sample_list_label.grid(row=5, column=0, sticky = tk.W)
+            sample_list = tk.Listbox(window, selectmode="multiple", height=5,
+                                        width=len(max(all_sample, key=len))+2)
+            sample_list.configure(exportselection=False)
+
+            sample_list.grid(row=6, column=0, columnspan=2, sticky=tk.W, padx=20)
+
+            # Add a no normalizer option, if chosen then the intensities will be plotted instead of fold change
+            normalizing_sample.insert("end", "None")
+            # Add all samples to both list
+            for x in all_sample:
+                normalizing_sample.insert("end", x)
+                sample_list.insert("end", x)
+
+            # Add previous selection from configs to normalizing_sample and sample_list. If both are not present then pass
+            try:
+                s = self.mspinit.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
+                if s == 'None':
+                    sample_index = 0
+                else:
+                    sample_index = all_sample.index(s)+1  # add 1 since a None option was added at the beginning of normalizing_sample
+                normalizing_sample.select_set(sample_index)
+                for sample in self.mspinit.configs["plot_r_timecourse_settings"].get("samples_to_plot"):
+                    sample_index = all_sample.index(sample)
+                    sample_list.select_set(sample_index)
+            except ValueError:
+                normalizing_sample.select_set(0)
+
+            def update_timecourse_settings():
+                samples_to_plot = []
+                errorbar = plot_errorbar.get()
+                timenorm = time_match_norm.get()
+                alignyaxis = align_yaxis.get()
+                for i in sample_list.curselection():
+                    samples_to_plot.append(sample_list.get(i))
+                self.mspinit.configs["plot_r_timecourse_settings"].update({
+                    "plot_errorbar": bool(errorbar),
+                    "align_yaxis": bool(alignyaxis),
+                    "sample_to_normalize": normalizing_sample.get(normalizing_sample.curselection()),
+                    "matching_time_normalization": bool(timenorm),
+                    "samples_to_plot": samples_to_plot
+                })
+                print("Settings for plotting timecourse updated!")
+
+
+            okButton = tk.Button(window, text="OK",
+                                command= lambda: update_timecourse_settings())
+            okButton.grid(row=7, column=1, padx=5, sticky=tk.W)
+
+        window.mainloop()
+        
     def plot_row(self, text: str, plot_name: str, plot_tool_tip: str = None, tab = None):
         row = self.heading_length + self.number_of_plots
         col = 0
