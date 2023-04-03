@@ -626,7 +626,7 @@ class MSPGUI(tk.Tk):
 
             self.number_of_plots += 1
 
-        def customize_sample_button(self, plot_text: str = None, tab = None):
+    def customize_sample_button(self, plot_text: str = None, tab = None):
         if tab == None:
             col = 0
             row = self.heading_length + self.number_of_plots
