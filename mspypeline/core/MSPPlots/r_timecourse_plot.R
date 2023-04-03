@@ -10,7 +10,7 @@ r_time_course_FC = function(df,
                           align_yaxis,
                           df_to_use)
 {# R script for plotting time-course FC data. Modified from Elisa Holstein's script (S18_E27_TimeCourse on 2/21/2023)
- # Parameters:
+ # Parameters, all are received from Python (core -> MSPPlots -> BasePlotter.py -> plot_r_timecourse):
   # ---------------------------------
   # df: dataframe of protein intensities, passed from python. The intensities (raw, iBAQ, or LFQ) were log2-transformed
   #     Indexes of df are gene names
@@ -18,7 +18,11 @@ r_time_course_FC = function(df,
   # plot_conditions: list of all conditions to be plotted
   # ctrl_condition: condition to normalize data against
   # plot_errorbar: Option to whether to plot error bars instead of dots
-  
+  # plot_title: name of the plot pdf file
+  # plotdir: the directory where the plots will be saved
+  # match_time_norm: (TRUE or FALSE) whether the normalization will be done by each time point of the ctrl_condition
+  # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
+  # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
   # -----------------------------
   
   # 0: Set up
@@ -37,6 +41,7 @@ r_time_course_FC = function(df,
   library(matrixStats)
   library(limma)
   library(EnhancedVolcano)
+  print("Plotting in progress :D The R script used to make this plot was adapted from Elisa Holstein's work")
   
   # 1: remove all irrelevant genes and conditions ---------
   df_gene <- subset(df, row.names(df) %in% genelist)  # This would also remove NA gene names
@@ -89,19 +94,36 @@ r_time_course_FC = function(df,
   #print(df_norm)
   for (condition in all_conditions)
   {samples_per_condition = grepl(condition,colnames(df_norm))
-  #print(df_norm[samples_per_condition])  
-  logFC = unlist(df_norm[samples_per_condition])
+  
+  # give warning if the condition was not measured at the timepoint
+  if (sum(samples_per_condition) == 0)
+  {print(paste("Warning: cannot find data for ", condition, " at timepoint ", t, sep=""))
+  
+  # if at the starting timepoint: set protein level to be similar to that of ctrl_condition (i.e. fold change to be all 0)
+  if (t == time_vector[1])
+  {
+    print(paste("The protein level of this condition was set to that of the normalizing sample (aka control): ", ctrl_condition, sep= ""))
+    logFC = rep(0, nrow(df_norm))
+    df_per_condition = data.frame("time"= rep(t,length(logFC)),
+                                  "condition"= rep(condition, length(logFC)), 
+                                  "gene"= rep(row.names(df_norm)),
+                                  "logFC"= logFC)
+    df_all_norm = rbind(df_all_norm, df_per_condition)
+  }}
+  else
+    {logFC = unlist(df_norm[samples_per_condition])
+  
   df_per_condition = data.frame("time"= rep(t,length(logFC)),
                                 "condition"= rep(condition, length(logFC)), 
-                                "gene"= rep(row.names(df_norm),length(samples_per_condition)),
+                                "gene"= rep(row.names(df_norm),sum(samples_per_condition)),
                                 "logFC"= logFC)
-  df_all_norm = rbind(df_all_norm, df_per_condition)
+  df_all_norm = rbind(df_all_norm, df_per_condition)}
   }
   }
   df_all_norm$time <- gsub("\\D", "", df_all_norm$time) # remove all non-digits inthe column time
   df_all_norm$time <- as.numeric(df_all_norm$time)
   df_all_norm = na.omit(df_all_norm) # remove all NAs
-  print('Pie')
+  
   # 3 plot with ggplot2 -------------------------------
   plot_FC <- ggplot(df_all_norm, aes(x=time, y=logFC, color=condition)) 
   if (plot_errorbar)
@@ -143,7 +165,7 @@ r_time_course_FC = function(df,
   plot_height = length(unique(genelist))/2 +2.5
   ggsave(plot_title, plot_FC, path = plotdir, width = 13, height = plot_height, 
          limitsize = FALSE,units = 'in')
-  
+  print("Plotting done! Check the prompt for any warning")
 }
 
 r_time_course_intensity = function(df, 
@@ -156,14 +178,17 @@ r_time_course_intensity = function(df,
                             align_yaxis,
                             df_to_use)
 {# R script for plotting time-course protein intensities (no fold change). Modified from Elisa Holstein's script (S18_E27_TimeCourse on 2/21/2023)
-  # Parameters:
+  # Parameters, all are received from Python (core -> MSPPlots -> BasePlotter.py -> plot_r_timecourse):
   # ---------------------------------
   # df: dataframe of protein intensities, passed from python. The intensities (raw, iBAQ, or LFQ) were log2-transformed
   #     Indexes of df are gene names
   # genelist: list of genes whose protein levels will be plotted
   # plot_conditions: list of all conditions to be plotted
-  # ctrl_condition: condition to normalize data against
   # plot_errorbar: Option to whether to plot error bars instead of dots
+  # plot_title: name of the plot pdf file
+  # plotdir: the directory where the plots will be saved
+  # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
+  # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
   # -----------------------------
   
   # 0: Set up
@@ -182,6 +207,7 @@ r_time_course_intensity = function(df,
   library(matrixStats)
   library(limma)
   library(EnhancedVolcano)
+  print("Plotting in progress :D The R script used to make this plot was adapted from Elisa Holstein's work")
   
   # 1: remove all irrelevant genes and conditions ---------
   df_gene <- subset(df, row.names(df) %in% genelist)  # This would also remove NA gene names
@@ -224,13 +250,18 @@ r_time_course_intensity = function(df,
     
     for (condition in plot_conditions)
     {samples_per_condition = grepl(condition,colnames(df_t))
-    #print(df_norm[samples_per_condition])  
+     
+    # give warning if the condition was not measured at the timepoint
+     if (sum(samples_per_condition) == 0)
+      print(paste("Warning: cannot find data for ", condition, " at timepoint ", t, sep=""))
+    else
+    { # otherwise, add data to df_all
     intensity = unlist(df_t[samples_per_condition])
     df_per_condition = data.frame("time"= rep(t,length(intensity)),
                                   "condition"= rep(condition, length(intensity)), 
-                                  "gene"= rep(row.names(df_t),length(samples_per_condition)),
+                                  "gene"= rep(row.names(df_t),sum(samples_per_condition)),
                                   "intensity"= intensity)
-    df_all = rbind(df_all, df_per_condition)
+    df_all = rbind(df_all, df_per_condition)}
     }
   }
   df_all$time <- gsub("\\D", "", df_all$time) # remove all non-digits inthe column time
