@@ -310,5 +310,5 @@ r_time_course_intensity = function(df,
   plot_height = (length(unique(df_all$gene))%/%4+1)*2 +2.5
   ggsave(plot_title, plot_intensity, path = plotdir, width = 13, height = plot_height, 
          limitsize = FALSE,units = 'in')
-  
+  print("Plotting done! Check the prompt for any warning")
 }
