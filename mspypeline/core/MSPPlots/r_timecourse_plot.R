@@ -162,7 +162,7 @@ r_time_course_FC = function(df,
     scale_y_continuous(limits = c(min(df_all_norm$logFC), max(df_all_norm$logFC)))
   # 4 return the plot object ---------------------------
   plot_title = paste(plot_title, ".pdf", sep="")
-  plot_height = length(unique(genelist))/2 +2.5
+  plot_height = (length(unique(df_all_norm$gene))%/%4 + 1)*2 +2.5
   ggsave(plot_title, plot_FC, path = plotdir, width = 13, height = plot_height, 
          limitsize = FALSE,units = 'in')
   print("Plotting done! Check the prompt for any warning")
@@ -307,7 +307,7 @@ r_time_course_intensity = function(df,
   
   # 4 return the plot object ---------------------------
   plot_title = paste(plot_title, ".pdf", sep="")
-  plot_height = length(unique(genelist))/2 +2.5
+  plot_height = (length(unique(df_all$gene))%/%4+1)*2 +2.5
   ggsave(plot_title, plot_intensity, path = plotdir, width = 13, height = plot_height, 
          limitsize = FALSE,units = 'in')
   
