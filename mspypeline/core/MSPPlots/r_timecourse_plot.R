@@ -1,14 +1,16 @@
 r_time_course_FC = function(df, 
-                          genelist, 
+                          genelist,
+                          genelist_name,
                           plot_conditions,
                           ctrl_condition,
                           logscale = TRUE,
                           plot_errorbar = FALSE,
                           plot_title,
-                          plotdir,
+                          savedir,
                           match_time_norm,
                           align_yaxis,
-                          df_to_use)
+                          df_to_use,
+                          selected_normalizer)
 {# R script for plotting time-course FC data. Modified from Elisa Holstein's script (S18_E27_TimeCourse on 2/21/2023)
  # Parameters, all are received from Python (core -> MSPPlots -> BasePlotter.py -> plot_r_timecourse):
   # ---------------------------------
@@ -19,10 +21,12 @@ r_time_course_FC = function(df,
   # ctrl_condition: condition to normalize data against
   # plot_errorbar: Option to whether to plot error bars instead of dots
   # plot_title: name of the plot pdf file
-  # plotdir: the directory where the plots will be saved
+  # savedir: the directory where the plots will be saved
   # match_time_norm: (TRUE or FALSE) whether the normalization will be done by each time point of the ctrl_condition
   # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
+  #For naming the output file:
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
+  # selected_normalizer: which normalizer was used
   # -----------------------------
   
   # 0: Set up
@@ -163,20 +167,26 @@ r_time_course_FC = function(df,
   # 4 return the plot object ---------------------------
   plot_title = paste(plot_title, ".pdf", sep="")
   plot_height = (length(unique(df_all_norm$gene))%/%4 + 1)*2 +2.5
+  plotdir = paste(savedir, "/plots", sep="")  # directory to save plot
   ggsave(plot_title, plot_FC, path = plotdir, width = 13, height = plot_height, 
-         limitsize = FALSE,units = 'in')
+         limitsize = FALSE,units = 'in', dpi = 300)
+  
+  # 5 pass the dataframe to plot_significance for statistical testing
+  plot_significance(df_all_norm, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer)
   print("Plotting done! Check the prompt for any warning")
 }
 
 r_time_course_intensity = function(df, 
                             genelist, 
+                            genelist_name,
                             plot_conditions,
                             logscale = TRUE,
                             plot_errorbar = FALSE,
                             plot_title,
-                            plotdir,
+                            savedir,
                             align_yaxis,
-                            df_to_use)
+                            df_to_use,
+                            selected_normalizer)
 {# R script for plotting time-course protein intensities (no fold change). Modified from Elisa Holstein's script (S18_E27_TimeCourse on 2/21/2023)
   # Parameters, all are received from Python (core -> MSPPlots -> BasePlotter.py -> plot_r_timecourse):
   # ---------------------------------
@@ -188,7 +198,10 @@ r_time_course_intensity = function(df,
   # plot_title: name of the plot pdf file
   # plotdir: the directory where the plots will be saved
   # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
+  #For naming the output file:
+  # genelist_name: name of the genelist
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
+  # selected_normalizer: which normalizer was used
   # -----------------------------
   
   # 0: Set up
@@ -308,7 +321,156 @@ r_time_course_intensity = function(df,
   # 4 return the plot object ---------------------------
   plot_title = paste(plot_title, ".pdf", sep="")
   plot_height = (length(unique(df_all$gene))%/%4+1)*2 +2.5
+  plotdir = paste(savedir, "/plots", sep="")  # directory to save plot
   ggsave(plot_title, plot_intensity, path = plotdir, width = 13, height = plot_height, 
-         limitsize = FALSE,units = 'in')
+         limitsize = FALSE,units = 'in', dpi = 300)
+  
+  # 5 pass the dataframe to plot_significance for statistical testing
+  plot_significance(df_all, savedir, genelist_name, match_time_norm = FALSE, df_to_use, selected_normalizer)  # match_time_norm set to FALSE since no normalization was done
   print("Plotting done! Check the prompt for any warning")
+}
+
+
+plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer)
+{# perform statistical testing of selected conditions and genes. Return heatmaps and a csv file showing the p-value
+  # of the testing for all genes
+  # For each gene: use a two-way ANOVA with time and condition (aka treatment/cell line/...) as factors,
+  # to see if there is a significant difference among conditions. Then use Tukey Honestly-Significant-Difference
+  # (TukeyHSD) for pair-wise comparisons. p-values from the TukeyHSD tests of condition are plotted and exported
+  # as heatmaps and csv file, respectively
+  
+  # Parameters----------------------------------------------------
+  # df: processed dataframes of fold change/intensities. Passed from r_timecourse_FC or r_timecourse_intensity
+  # savedir: need to add either "/plots" or "/csv_significance" to become directory for saving results
+  # match_time_norm: whether data was normalized per time point
+  # For naming the output file:
+  # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
+  # selected_normalizer: which normalizer was used
+  # ----------------------------------------------------
+  
+  # 0 ------------------------------------------------------
+  # Rename df columns so data processing is easier
+  library(scales)
+  colnames(df) = c("time", "condition", "gene", "intensity")
+  if (match_time_norm)
+    print("Warning: normalization per timepoint was chosen. Statistical testings might not reflect true significant differences between conditions")
+  df$time = sapply(df$time, function(x) paste(x))
+  all_conditions = sort(unique(df$condition))
+  condition_code = c()
+  for (i in 1:length(all_conditions))
+    condition_code[all_conditions[i]] = paste(i)
+  df$condition = gsub("-", "@", df$condition)
+  # make a modified condition list to fill missing values
+  all_conditions_mod = gsub("-", "@", all_conditions)
+  condition_code_mod = c()
+  for (i in 1:length(all_conditions_mod))
+    condition_code_mod[all_conditions_mod[i]] = paste(i)
+  # 1  ---------------------------------------------------------------
+  all_sign_df = data.frame("sample1" = c(), "sample2" = c(), "gene" = c(), "p_value" = c())
+  all_genes = unique(df$gene)
+  for (g in all_genes)
+  {# Two-way ANOVA testing per gene
+    df_gene = df %>%
+      subset(gene == g) %>%
+      group_by(time, condition) %>%
+      filter(n()>1)
+    if ((length(unique(df_gene$time))<2) || (length(unique(df_gene$condition))<2))
+    {
+      print(paste(genelist_name, ": skip statistical testing for gene", g, "due to insufficient observations"))
+      df_gene = data.frame("sample1" = all_conditions_mod[-1],
+                           "sample2" = rep(all_conditions_mod[1], length(all_conditions_mod)-1),
+                           "gene" = rep(g, length(all_conditions_mod)-1),
+                           "p_value" = rep(NA, length(all_conditions_mod)-1))
+    } else
+    {two.way = aov(intensity ~ time + condition, data = df_gene)
+    tukey = TukeyHSD(two.way)
+    tukey = tukey$condition
+    df_gene = data.frame("sample1" = sapply(row.names(tukey), function(x) unlist(strsplit(x, "-"))[1]),
+                         "sample2" = sapply(row.names(tukey), function(x) unlist(strsplit(x, "-"))[2]),
+                         "gene" = rep(g, length(row.names(tukey))),
+                         "p_value" = tukey[,4])}
+    # add rows with NA p-value if not all comparisons were made so that color-coding the axes are correct
+    sample1_list = unique(df_gene$sample1)
+    sample2_list = unique(df_gene$sample2)
+    if (length(unique(sample2_list))< (length(all_conditions_mod)-1))
+      for (sample in all_conditions_mod[-length(all_conditions_mod)])
+        if (!(sample %in% sample2_list))
+          df_gene = rbind(df_gene, data.frame("sample1"= sample1_list, "sample2"= rep(sample, length(sample1_list)),
+                                            "gene"= rep(g, length(sample1_list)),
+                                            "p_value"=rep(NA, length(sample1_list))))
+    # add df_gene to the dataframe containing everything
+    all_sign_df = rbind(all_sign_df, df_gene)
+  }
+  all_sign_df$sample1 = gsub("@", "-", all_sign_df$sample1)
+  all_sign_df$sample2 = gsub("@", "-", all_sign_df$sample2)
+  all_sign_df$label_sample1 = sapply(all_sign_df$sample1, function(x) condition_code[x])
+  all_sign_df$label_sample2 = sapply(all_sign_df$sample2, function(x) condition_code[x])
+  all_sign_df$sign_level <- cut(all_sign_df$p_value, breaks=c(0,0.00001, 0.0001, 0.001, 0.01, 0.05, 1), 
+                         label=c("*****","****" ,"***", "**", "*", ""))  # Create column of significance labels
+  # 2 plot the heatmap ------------------------------------------------------------------
+  # sample legend
+  sample_legend = "Sample labels: "
+  for (i in 1:length(attributes(condition_code)$names))
+    sample_legend = paste(sample_legend, condition_code[i], "=", attributes(condition_code)$names[i],", ", sep="")
+  # significance legend
+  sign_legend = "p-value: ***** < 0.00001 < **** < 0.0001 < *** < 0.001 < ** < 0.01 < * < 0.05"
+  # legend of the test used
+  test_legend = "Statistical testing done by two-way ANOVA for each gene followed by Tukey Honestly-Significant-Difference"
+  
+  # color hex code
+  color_code = hue_pal()(length(all_conditions))
+  # Plot!
+  plot_sign = ggplot(all_sign_df, aes(x= label_sample2, y= label_sample1))+
+    geom_tile(aes(fill= p_value), color= "white")+
+    geom_text(aes(label=sign_level), color="black", size=5) + 
+    facet_wrap(~ gene, ncol=4, scales = "free_x")
+  
+  # adjust appearance
+  plot_sign = plot_sign +
+    theme_article() +
+    labs(title=paste("p-values from pair-wise comparisons of selected conditions,", df_to_use,"intensities"),
+         y = "",
+         x = "Sample labels (explanation at the top of the plot)") +
+    theme(plot.title = element_text(hjust = 0.5, color="black", size=18, face="bold"), 
+          axis.title.x = element_text(size=15, face= "bold"),
+          #axis.title.y = element_text(size=15, face= "bold"),
+          axis.text.y = element_text(size=15, face = "bold", color = color_code[-1]),
+          axis.text.x = element_text(size=15, face= "bold", color = color_code[-length(color_code)]),
+          axis.line = element_line(colour="black"),
+          legend.text = element_text(size=14),
+          legend.title = element_blank(),
+          legend.key.width = unit(6, "cm"),
+          legend.position = "top",
+          # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
+          strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
+    scale_x_discrete(breaks = condition_code[-length(condition_code)], expand = c( 0, 0))+
+    scale_y_discrete(breaks = condition_code[-1], expand = c(0,0))+
+    scale_fill_gradient(high = "#A0C47D", low = "red", na.value = "white", trans = "log",
+                        breaks = c(0.00001, 0.0001, 0.001, 0.01, 0.05),
+                        guide = guide_colorbar(ticks.colour = "black"))
+  
+  # add the legend
+  plot_sign = grid.arrange(plot_sign, top = sample_legend)
+  plot_sign = grid.arrange(plot_sign, top = sign_legend)
+  plot_sign = grid.arrange(plot_sign, top = test_legend)
+  # 3 save results -----------------------------------------------------------------
+  # assemble file name
+  file_title = paste("significance",genelist_name, "samples ")
+  for (sample in all_conditions)
+    file_title = paste(file_title, sample, ", ", sep="")
+  if (match_time_norm)
+    file_title = paste(file_title, "per time point,", sep="")
+  if (selected_normalizer != "None")
+    file_title = paste(file_title, selected_normalizer)
+  file_title = paste(file_title, df_to_use, sep="")
+  plot_name = paste(file_title, ".pdf", sep="")
+  # save heatmaps as a pdf file
+  plotdir = paste(savedir, "/plots", sep= "")
+  plot_height = (length(unique(all_sign_df$gene))%/%4+1)*3 + 3
+  ggsave(filename=plot_name, 
+         plot=plot_sign, path = plotdir, width = 12, height = plot_height, 
+         limitsize = FALSE,units = 'in')
+  # save all_sign_df as a csv file
+  csvdir = paste(savedir, "/csv_significance/", file_title,".csv", sep= "")
+  write.csv(all_sign_df, file = csvdir, row.names = FALSE)
 }
