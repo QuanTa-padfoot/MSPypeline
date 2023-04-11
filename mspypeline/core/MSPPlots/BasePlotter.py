@@ -181,7 +181,7 @@ class BasePlotter:
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
-        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats",)
+        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales")
         r_bioconducter_package_names = ("limma", "MBQN", "preprocessCore", "EnhancedVolcano")
         install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
@@ -1475,23 +1475,31 @@ class BasePlotter:
         plot_errorbar = self.configs["plot_r_timecourse_settings"].get("plot_errorbar")
         align_yaxis =self.configs["plot_r_timecourse_settings"].get("align_yaxis")
         match_time_norm = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
-        plotdir = self.file_dir_timecourse.replace('\\', '/')
+        savedir = self.file_dir_timecourse.replace('\\', '/')
         ctrl_condition = self.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
         print(f"Ctrl condition {ctrl_condition}")
         plot_conditions = []
         for sample in self.configs["plot_r_timecourse_settings"].get("samples_to_plot"):
             plot_conditions.append(sample)
-        # create a folder for storing plots if folder is absent
+        # create a folder for storing plots and csv files if folder is absent
         if not os.path.exists(self.file_dir_timecourse):
             os.makedirs(self.file_dir_timecourse)
-
+        plotdir = os.path.join(self.file_dir_timecourse, "plots")  # folder for storing plots
+        if not os.path.exists(plotdir):
+            os.makedirs(plotdir)
+        signdir = os.path.join(self.file_dir_timecourse, "csv_significance")  # folder for storing p-values as csv files
+        if not os.path.exists(signdir):
+            os.makedirs(signdir)
+            
+        # add variables to the R environment
         ro.globalenv['plot_conditions'] = ro.StrVector(plot_conditions)
         ro.globalenv['ctrl_condition'] = ctrl_condition
-
-        ro.globalenv['plotdir'] = plotdir
+        ro.globalenv['savedir'] = savedir
         ro.globalenv['plot_errorbar'] = plot_errorbar
         ro.globalenv['align_yaxis'] = align_yaxis
         ro.globalenv['match_time_norm'] = match_time_norm
+        ro.globalenv['selected_normalizer'] = self.configs.get("selected_normalizer")
+        
         for df_to_use in dfs_to_use:
             # allow conversion of pd objects to r
             pandas2ri.activate()
@@ -1514,14 +1522,15 @@ class BasePlotter:
                     # Define the remaining variables in R environment
                     ro.globalenv['genelist'] = ro.StrVector(genelist)
                     ro.globalenv['plot_title'] = plot_title
+                    ro.globalenv['genelist_name'] = go_terms
                     # plot fold change if a ctrl_condition was specified, or plot fold change if ctrl_condition is specified
                     if ctrl_condition == "None":
                         ro.r(
-                            '''r_time_course_intensity(df, genelist, plot_conditions, logscale, plot_errorbar, 
-                            plot_title, plotdir, align_yaxis, df_to_use)''')
+                            '''r_time_course_intensity(df, genelist, genelist_name, plot_conditions, logscale, plot_errorbar, 
+                            plot_title, savedir, align_yaxis, df_to_use, selected_normalizer)''')
                     else:
-                        ro.r('''r_time_course_FC(df, genelist, plot_conditions, ctrl_condition, logscale, plot_errorbar,
-                                                 plot_title, plotdir, match_time_norm, align_yaxis, df_to_use)''')
+                        ro.r('''r_time_course_FC(df, genelist, genelist_name, plot_conditions, ctrl_condition, logscale, plot_errorbar,
+                                                 plot_title, savedir, match_time_norm, align_yaxis, df_to_use, selected_normalizer)''')
             if self.interesting_proteins != {}:
                 for pathways in self.interesting_proteins:
                     plot_title, genelist = self.get_r_timecourse_data(df_to_use=df_to_use,
@@ -1531,14 +1540,15 @@ class BasePlotter:
                     # Define the remaining variables in R environment
                     ro.globalenv['genelist'] = ro.StrVector(genelist)
                     ro.globalenv['plot_title'] = plot_title
-                    # plotting time!
+                    ro.globalenv['genelist_name'] = pathways
+                    # plot fold change if a ctrl_condition was specified, or plot fold change if ctrl_condition is specified
                     if ctrl_condition == "None":
                         ro.r(
-                            '''r_time_course_intensity(df, genelist, plot_conditions, logscale, plot_errorbar, 
-                            plot_title, plotdir, align_yaxis, df_to_use)''')
+                            '''r_time_course_intensity(df, genelist, genelist_name, plot_conditions, logscale, plot_errorbar, 
+                            plot_title, savedir, align_yaxis, df_to_use, selected_normalizer)''')
                     else:
-                        ro.r('''r_time_course_FC(df, genelist, plot_conditions, ctrl_condition, logscale, plot_errorbar,
-                                                 plot_title, plotdir, match_time_norm, align_yaxis, df_to_use)''')
+                        ro.r('''r_time_course_FC(df, genelist, genelist_name, plot_conditions, ctrl_condition, logscale, plot_errorbar,
+                                                 plot_title, savedir, match_time_norm, align_yaxis, df_to_use, selected_normalizer)''')
     
     def get_pca_data(self, df_to_use: str, level: int, n_components: int = 2, fill_value: float = 0,
                      no_missing_values: bool = True, fill_na_before_norm: bool = False, **kwargs):
