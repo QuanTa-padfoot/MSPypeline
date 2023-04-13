@@ -405,7 +405,7 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   all_sign_df$sample2 = gsub("@", "-", all_sign_df$sample2)
   all_sign_df$label_sample1 = sapply(all_sign_df$sample1, function(x) condition_code[x])
   all_sign_df$label_sample2 = sapply(all_sign_df$sample2, function(x) condition_code[x])
-  all_sign_df$sign_level <- cut(all_sign_df$p_value, breaks=c(0,0.00001, 0.0001, 0.001, 0.01, 0.05, 1), 
+  all_sign_df$sign_level <- cut(all_sign_df$p_value, breaks=c(-1,0.00001, 0.0001, 0.001, 0.01, 0.05, 1), 
                          label=c("*****","****" ,"***", "**", "*", ""))  # Create column of significance labels
   # 2 plot the heatmap ------------------------------------------------------------------
   # sample legend
@@ -414,6 +414,8 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
     sample_legend = paste(sample_legend, condition_code[i], "=", attributes(condition_code)$names[i],", ", sep="")
   # significance legend
   sign_legend = "p-value: ***** < 0.00001 < **** < 0.0001 < *** < 0.001 < ** < 0.01 < * < 0.05"
+  # add note for when p = 0 (likely a number issue aka p-value too small)
+  p0_note = "p-value = 0 will give a white cell with ***** (since color scale was log-transformed)"                                   
   # legend of the test used
   test_legend = "Statistical testing done by two-way ANOVA for each gene followed by Tukey Honestly-Significant-Difference"
   
@@ -451,6 +453,7 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   
   # add the legend
   plot_sign = grid.arrange(plot_sign, top = sample_legend)
+  plot_sign = grid.arrange(plot_sign, top = p0_note)                                   
   plot_sign = grid.arrange(plot_sign, top = sign_legend)
   plot_sign = grid.arrange(plot_sign, top = test_legend)
   # 3 save results -----------------------------------------------------------------
