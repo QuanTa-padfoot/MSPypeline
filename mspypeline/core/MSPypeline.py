@@ -322,10 +322,14 @@ class MSPGUI(tk.Tk):
                       "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
         self.plot_row("Volcano plot (R)", "r_volcano",
                       "Which proteins are significantly higher or lower in intensity comparing two groups?\n Which proteins are detected only in one group and not in the other?", tab = tab3)
+        # button for selecting samples to plot volcanoes
+        volcano_label = ttk.Label(tab3, text="Select samples for volcano plot:", font="Helvetica 10 bold")
+        volcano_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
+        self.customize_sample_button(plot_text="volcano", tab=tab3)        
+        
         self.plot_row("Time-course intensities (R)", "r_timecourse",
                       "What is the dynamics of the protein level across several condition?\n Genes to be plotted are detected from selected GO and Pathway gene lists",
                       tab=tab3)
-
         # button for customizing sample selection for timecourse FC
         norm_method_label = ttk.Label(tab3, text="Settings for plotting timecourse:", font="Helvetica 10 bold")
         norm_method_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
@@ -627,11 +631,18 @@ class MSPGUI(tk.Tk):
             self.number_of_plots += 1
 
     def customize_sample_button(self, plot_text: str = None, tab = None):
+        '''Create a button for customizing plots (currently available for volcano and timecourse)
+
+        need to identify plot_text, can be either "volcano" or "timecourse".'''
         if tab == None:
             col = 0
             row = self.heading_length + self.number_of_plots
-            customize = ttk.Button(self, text="Customize")
-            customize.grid(row=row, column=col, sticky=tk.W, padx=5)
+            if plot_text == "timecourse":
+                customize = ttk.Button(self, text="Customize", command= lambda: self.customize_timecourse())
+                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
+            elif plot_text == "volcano":
+                customize = ttk.Button(self, text="Select sample", command= lambda: self.customize_volcano())
+                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
 
             self.number_of_plots += 1
         else:
@@ -640,11 +651,131 @@ class MSPGUI(tk.Tk):
             if plot_text == "timecourse":
                 customize = ttk.Button(tab, text="Customize", command= lambda: self.customize_timecourse())
                 customize.grid(row=row, column=col, sticky=tk.W, padx=5)
+            elif plot_text == "volcano":
+                customize = ttk.Button(tab, text="Select sample", command= lambda: self.customize_volcano())
+                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
 
             self.number_of_plots += 1
 
+    def customize_volcano(self):
+        '''Popup window to select samples for plotting volcano.
+        The window finds all samples at a given level, and one can choose them to be either "downregulated" or "upregulated".
+        The top option, DEFAULT, means that MSPypeline will plot all sample combinations.
+        Nevertheless, this does NOT mean the desired upregulated-downregulated sample pair will always be plotted.
+        If default is selected, all other selected samples will be ignored.
+        This function serves to avoid plotting unnecessary combinations.
+        Selected settings are passed to configs, which is then picked up by BasePlotter to make volcano plots.'''
+        window = tk.Toplevel()
+        window.geometry("500x400")
+        window.title("Select samples for plotting volcanoes")
+
+        # get the level for volcano plot
+        all_level = self.plot_settings.get("r_volcano_levels", []).get_selection()
+        selected_level = [level for level in all_level.keys() if all_level[level]]
+        if selected_level == [] or len(selected_level) > 1:
+            note = tk.Label(window, text="No level or more than 1 level was selected. To select samples, only 1 level is allowed at a time")
+            note.grid(row=0, column=0)
+            note1 = tk.Label(window, text="Please close this window and try again after checking the level selection")
+            note1.grid(row=1, column=0)
+        else:
+            selected_level = selected_level[0]
+            all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+            max_level = len(all_replicates[0].split("_")) - 1
+            all_sample = ["default"]
+            if max_level == selected_level:
+                note = tk.Label(window,
+                                text="Volcano plot is not possible at the lowest level")
+                note.grid(row=0, column=0)
+                note1 = tk.Label(window,
+                                 text="Please close this window and try again after checking the level selection")
+                note1.grid(row=1, column=0)
+            else:
+                for rep in all_replicates:
+                    rep_split = rep.split("_")
+                    del rep_split[-(max_level-selected_level):]
+                    rep_split = "_".join(rep_split)
+                    if rep_split not in all_sample:
+                        all_sample.append(rep_split)
+
+                # layout for the popup windown
+                sample1_label = tk.Label(window, text= "Select all 1st samples to compare\n (downregulated)")
+                sample1_label.grid(row=0,column=0)
+                sample1_list = tk.Listbox(window, selectmode="multiple", height=15, width=len(max(all_sample, key=len))+2)
+                sample1_list.configure(exportselection=False)
+                sample1_list.grid(row=1, column=0, sticky=tk.W, padx=20)
+
+                filler_label = tk.Label(window, text= "  ")
+                filler_label.grid(row=0, column=1)
+
+                sample2_label = tk.Label(window, text="Select all 2nd samples to compare\n (upregulated)")
+                sample2_label.grid(row=0, column=2)
+                sample2_list = tk.Listbox(window, selectmode="multiple", height=15, width=len(max(all_sample, key=len)) + 2)
+                sample2_list.configure(exportselection=False)
+                sample2_list.grid(row=1, column=2, sticky=tk.W, padx=20)
+
+                # Add a default option, if chosen then the all combinations will be plotted
+
+                # Add all samples to both list
+                for x in all_sample:
+                    sample1_list.insert("end", x)
+                    sample2_list.insert("end", x)
+
+                # Add previous selection from configs
+                s1 = self.mspinit.configs["plot_r_volcano_settings"].get("sample1_list")
+                if s1 == "default":
+                    sample1_list.select_set(0)
+                    sample2_list.select_set(0)
+                else:
+                    try:
+                        for sample in s1:
+                            sample_index = all_sample.index(sample)
+                            sample1_list.select_set(sample_index)
+                        for sample in self.mspinit.configs["plot_r_volcano_settings"].get("sample2_list"):
+                            sample_index = all_sample.index(sample)
+                            sample2_list.select_set(sample_index)
+                    except (ValueError, TypeError):
+                        sample1_list.select_set(0)
+                        sample2_list.select_set(0)
+                def update_volcano_settings():
+                    '''Triggered when press the OK button. This function saves the selected samples and close the popup window.
+                    If default was chosen, all other selected samples will be ignored.
+                    If nothing was chosen, the default option will be applied'''
+                    sample1, sample2 = [], []
+                    for i in sample1_list.curselection():
+                        sample1.append(sample1_list.get(i))
+                    for i in sample2_list.curselection():
+                        sample2.append(sample2_list.get(i))
+                    if "default" in sample1 or "default" in sample2:
+                        sample1, sample2 = "default", "default"
+                        print("The \"default\" option was selected, other selected samples will be ignored")
+                    elif sample1 == [] or sample2 == []:
+                        sample1, sample2 = "default", "default"
+                        print("No sample was selected, the \"default\" option will be applied")
+                    self.mspinit.configs["plot_r_volcano_settings"].update({
+                        "sample1_list": sample1,
+                        "sample2_list": sample2
+                        })
+                    print("Sample selection for volcano updated!")
+                    window.destroy()
+
+                def reset_selection():
+                    '''Triggered when press the Reset button. All selected samples will be cleared and the default is selected'''
+                    sample1_list.selection_clear(0, 'end')
+                    sample2_list.selection_clear(0, 'end')
+                    sample1_list.select_set(0)
+                    sample2_list.select_set(0)
+
+                resetButton = tk.Button(window, text="Reset",
+                                    command=lambda: reset_selection())
+                resetButton.grid(row=2, column=1, padx=5, sticky=tk.W)
+                okButton = tk.Button(window, text="OK",
+                                 command=lambda: update_volcano_settings())
+                okButton.grid(row=2, column=3, padx=5, sticky=tk.W)
+        window.mainloop()
+            
     def customize_timecourse(self):
-        '''Popup window to select samples for plotting the timecourse'''
+        '''Popup window to select samples for plotting the timecourse.
+        Selected settings are passed to configs, which are then picked up by BasePlotter to make plots.'''
         window = tk.Toplevel()
         window.geometry("500x400")
         window.title("Selecting samples for plotting timecourse Fold Change")
@@ -731,6 +862,7 @@ class MSPGUI(tk.Tk):
                     "samples_to_plot": samples_to_plot
                 })
                 print("Settings for plotting timecourse updated!")
+                window.destroy()
 
 
             okButton = tk.Button(window, text="OK",
