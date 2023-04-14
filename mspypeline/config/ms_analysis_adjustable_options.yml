@@ -175,6 +175,8 @@ plot_r_volcano_settings:
   fchange_threshold: 2          # float: min fold change threshold (before log2 transformation) to be labelled significant
   scatter_size: 20              # float: size of the points in the scatter plots
   n_labelled_proteins: 10       # int: number of points that will be marked in th plot
+  sample1_list: default  # List of samples that should be analysed (left side/ down regulated)
+  sample2_list: default  # List of samples that should be analysed (right side/ up regulated)
 
 plot_r_timecourse_settings:
   create_plot: false
