@@ -1405,14 +1405,26 @@ class BasePlotter:
         """
         plots = []
         plot_once = False
+        # get list of samples from configs
+        s1 = self.configs["plot_r_volcano_settings"].get("sample1_list")
+        s2 = self.configs["plot_r_volcano_settings"].get("sample2_list")
         for level in levels:
             for df_to_use in dfs_to_use:
                 if sample1 and sample2:
                     level_keys = [sample1, sample2]
                     plot_once = True
-                else:
+                # if "default" was chosen: store all possible combinations in level_keys
+                elif "default" in s1:
                     level_keys = self.all_tree_dict[df_to_use].level_keys_full_name[level]
-                for g1, g2 in combinations(level_keys, 2):
+                    level_keys = combinations(level_keys, 2)
+                # if sample1_list and sample2_list were specified: add these combinations to level_keys
+                else:
+                    level_keys = []
+                    for g1 in s1:
+                        for g2 in s2:
+                            if g1 != g2:
+                                level_keys.append([g1, g2])
+                for g1, g2 in level_keys:
                     data = self.get_r_volcano_data(g1, g2, df_to_use)
                     if data:
                         plot_kwargs = dict(g1=g1, g2=g2, save_path=self.file_dir_volcano, df_to_use=df_to_use,
