@@ -181,7 +181,7 @@ class BasePlotter:
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
-        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales")
+        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales", "ggtext")
         r_bioconducter_package_names = ("limma", "MBQN", "preprocessCore", "EnhancedVolcano")
         install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
