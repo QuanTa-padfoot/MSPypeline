@@ -22,7 +22,7 @@ If you encounter a bug or want to request a feature open an issue on github.
 # Installation
 To use this version of MSPypeline, you would need:
 - Anaconda 3
-- Python 3.7 or 3.8
+- Python 3.7, 3.8, or 3.9
 - R >= 4.3.0
 
 Installing MSPypeline can be done from an Anaconda Powershell Prompt. First, you should to go to a directory at which you wish to download MSPypeline to (e.g.):
