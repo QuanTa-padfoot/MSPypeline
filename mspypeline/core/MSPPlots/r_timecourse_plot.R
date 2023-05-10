@@ -146,6 +146,7 @@ r_time_course_FC = function(df,
   plot_FC <-  plot_FC + 
     theme_article() +
     labs(title=paste("Fold change of", df_to_use, "intensities with respect to", ctrl_condition),
+         subtitle = paste("Gene list:", genelist_name),
          x =paste("time (",time_unit,")",sep=""), y = "log2(FC)") +
     theme(plot.title = element_text(hjust = 0.5, color="black", size=18, face="bold"), 
           axis.title.x = element_text(size=14, face="bold"),
@@ -166,8 +167,20 @@ r_time_course_FC = function(df,
     scale_y_continuous(limits = c(min(df_all_norm$logFC), max(df_all_norm$logFC)))
   # 4 return the plot object ---------------------------
   plot_title = paste(plot_title, ".pdf", sep="")
-  plot_height = (length(unique(df_all_norm$gene))%/%4 + 1)*2 +2.5
+  plot_height = (length(unique(df_all_norm$gene))%/%4 + 1)*2 +3
   plotdir = paste(savedir, "/plots", sep="")  # directory to save plot
+  # Handle exception for when the directory is too long
+  if (nchar(paste0(plotdir,'/', plot_title)) > 250)
+  {print("Warning: directory to the time-course plot exceeds 250 characters")
+    plot_title1 = paste0(genelist_name,' ',df_to_use, '.pdf')
+    if (nchar(paste0(plotdir,'/', plot_title1)) > 250)
+      print("Cannot save the plot. Please copy the data file to a shorter directory and try again")
+    else
+      {print(paste("The time-course plot will be saved under the name '",plot_title1,"'"))
+      print("To make sure no plot is overwritten, please copy the data file to a shorter directory and try again")
+      plot_title = plot_title1
+    }
+  }
   ggsave(plot_title, plot_FC, path = plotdir, width = 13, height = plot_height, 
          limitsize = FALSE,units = 'in', dpi = 300)
   
@@ -299,6 +312,7 @@ r_time_course_intensity = function(df,
   plot_intensity <-  plot_intensity + 
     theme_article() +
     labs(title=paste(df_to_use, "intensities of selected genes"),
+         subtitle = paste("Gene list:", genelist_name),
          x =paste("time (",time_unit,")",sep=""), y = "log2(intensity)") +
     theme(plot.title = element_text(hjust = 0.5, color="black", size=18, face="bold"), 
           axis.title.x = element_text(size=14, face="bold"),
@@ -320,8 +334,20 @@ r_time_course_intensity = function(df,
   
   # 4 return the plot object ---------------------------
   plot_title = paste(plot_title, ".pdf", sep="")
-  plot_height = (length(unique(df_all$gene))%/%4+1)*2 +2.5
+  plot_height = (length(unique(df_all$gene))%/%4+1)*2 +3
   plotdir = paste(savedir, "/plots", sep="")  # directory to save plot
+  # Handle exception for when the directory is too long
+  if (nchar(paste0(plotdir, '/',plot_title)) > 250)
+  {print("Warning: directory to the time-course plot exceeds 250 characters")
+    plot_title1 = paste0(genelist_name,' ',df_to_use, '.pdf')
+    if (nchar(paste0(plotdir, '/', plot_title1)) > 250)
+      print("Cannot save the plot. Please copy the data file to a shorter directory and try again")
+    else
+    {print(paste("The time-course plot will be saved under the name '",plot_title1,"'"))
+      print("To make sure no plot is overwritten, please copy the data file to a shorter directory and try again")
+      plot_title = plot_title1
+    }
+  }
   ggsave(plot_title, plot_intensity, path = plotdir, width = 13, height = plot_height, 
          limitsize = FALSE,units = 'in', dpi = 300)
   
@@ -351,6 +377,7 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   # 0 ------------------------------------------------------
   # Rename df columns so data processing is easier
   library(scales)
+  library(ggtext)  # for coloring axes' text
   colnames(df) = c("time", "condition", "gene", "intensity")
   if (match_time_norm)
     print("Warning: normalization per timepoint was chosen. Statistical testings might not reflect true significant differences between conditions")
@@ -407,20 +434,67 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   all_sign_df$label_sample2 = sapply(all_sign_df$sample2, function(x) condition_code[x])
   all_sign_df$sign_level <- cut(all_sign_df$p_value, breaks=c(-1,0.00001, 0.0001, 0.001, 0.01, 0.05, 1), 
                          label=c("*****","****" ,"***", "**", "*", ""))  # Create column of significance labels
-  # 2 plot the heatmap ------------------------------------------------------------------
+  
+  # 2 save all_sign_df to a csv file -------------------------------------------------
+  # assemble file name
+  file_title = paste("significance ",genelist_name, "samples ")
+  for (sample in all_conditions)
+    file_title = paste(file_title, sample, ", ", sep="")
+  if (match_time_norm)
+    file_title = paste(file_title, "per time point,", sep="")
+  if (selected_normalizer != "None")
+    file_title = paste(file_title, selected_normalizer)
+  file_title = paste(file_title, df_to_use, sep="")
+  # save all_sign_df as a csv file
+  csvdir = paste(savedir, "/csv_significance/", file_title,".csv", sep= "")
+  # handle exception when directory is too long
+  if (nchar(csvdir)>250)
+  {print("Warning: directory to csv file of p-values exceeds 250 characters.")
+    # set the filename to be shorter, including only "significance" and genelist_name
+    csvdir1 = paste(savedir, "/csv_significance/significance ", genelist_name,' ',df_to_use,".csv", sep= "")
+    if (nchar(csvdir)>250)
+      print("Cannot save the csv file. Please copy the data file to a shorter directory and try again")
+    else
+    {print(paste("csv file of significance will be saved under the name: significance ",genelist_name,' ',df_to_use ,".csv", sep= ""))
+      print("To make sure no file is overwritten, please copy the data file to a shorter directory and try again")
+      csvdir = csvdir1}
+  }
+  write.csv(all_sign_df, file = csvdir, row.names = FALSE)
+  
+  # 3 plot the heatmap ------------------------------------------------------------------
+  # add 10^-7 if p-value = 0 so it appears red on the plot
+  all_sign_df[which(all_sign_df$p_value == 0),"p_value"] = 1e-7
   # sample legend
   sample_legend = "Sample labels: "
   for (i in 1:length(attributes(condition_code)$names))
     sample_legend = paste(sample_legend, condition_code[i], "=", attributes(condition_code)$names[i],", ", sep="")
   # significance legend
-  sign_legend = "p-value: ***** < 0.00001 < **** < 0.0001 < *** < 0.001 < ** < 0.01 < * < 0.05"
-  # add note for when p = 0 (likely a number issue aka p-value too small)
-  p0_note = "p-value = 0 will give a white cell with ***** (since color scale was log-transformed)"                                   
+  sign_legend = "p-value: ***** < 0.00001 < **** < 0.0001 < *** < 0.001 < ** < 0.01 < * < 0.05"                               
   # legend of the test used
   test_legend = "Statistical testing done by two-way ANOVA for each gene followed by Tukey Honestly-Significant-Difference"
   
   # color hex code
   color_code = hue_pal()(length(all_conditions))
+  # add color code of sample1 (y axis) to all_sign_df
+  label_sample1_color = rep(NA, nrow(all_sign_df))
+  label_sample2_color = rep(NA, nrow(all_sign_df))
+  sample_labels = c()
+  for (condition in 1:length(condition_code))
+  {p1 = which(all_sign_df$label_sample1 == condition_code[condition])
+    p2 = which(all_sign_df$label_sample2 == condition_code[condition])
+    color_text = paste0("<span style = 'color:", color_code[condition], "'>", condition, "</span>")  # encoding the color of the text by ggtext
+    label_sample1_color[p1] = color_text
+    label_sample2_color[p2] = color_text
+    sample_labels = append(sample_labels, color_text)
+  }
+  all_sign_df$label_sample1 = label_sample1_color
+  all_sign_df$label_sample2 = label_sample2_color
+  # Rearrange the samples in the heatmap
+  all_sign_df$label_sample1 = as.factor(all_sign_df$label_sample1)
+  all_sign_df$label_sample1 = factor(all_sign_df$label_sample1, levels = sample_labels[-1])
+  all_sign_df$label_sample2 = as.factor(all_sign_df$label_sample2)
+  all_sign_df$label_sample2 = factor(all_sign_df$label_sample2, levels = sample_labels[-length(sample_labels)])
+  
   # Plot!
   plot_sign = ggplot(all_sign_df, aes(x= label_sample2, y= label_sample1))+
     geom_tile(aes(fill= p_value), color= "white")+
@@ -431,13 +505,14 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   plot_sign = plot_sign +
     theme_article() +
     labs(title=paste("p-values from pair-wise comparisons of selected conditions,", df_to_use,"intensities"),
+         subtitle = paste("Gene list:", genelist_name),
          y = "",
          x = "Sample labels (explanation at the top of the plot)") +
     theme(plot.title = element_text(hjust = 0.5, color="black", size=18, face="bold"), 
           axis.title.x = element_text(size=15, face= "bold"),
-          #axis.title.y = element_text(size=15, face= "bold"),
-          axis.text.y = element_text(size=15, face = "bold", color = color_code[-1]),
-          axis.text.x = element_text(size=15, face= "bold", color = color_code[-length(color_code)]),
+          axis.title.y = element_text(size=20, face= "bold"),
+          axis.text.y = element_markdown(size=15, face = 'bold'),
+          axis.text.x = element_markdown(size=15, face = 'bold'),
           axis.line = element_line(colour="black"),
           legend.text = element_text(size=14),
           legend.title = element_blank(),
@@ -445,35 +520,36 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
           legend.position = "top",
           # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
           strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
-    scale_x_discrete(breaks = condition_code[-length(condition_code)], expand = c( 0, 0))+
-    scale_y_discrete(breaks = condition_code[-1], expand = c(0,0))+
+    scale_x_discrete(breaks = sample_labels[-length(sample_labels)], expand = c( 0, 0))+
+    scale_y_discrete(breaks = sample_labels[-1], expand = c(0,0))+
     scale_fill_gradient(high = "#A0C47D", low = "red", na.value = "white", trans = "log",
                         breaks = c(0.00001, 0.0001, 0.001, 0.01, 0.05),
                         guide = guide_colorbar(ticks.colour = "black"))
   
   # add the legend
-  plot_sign = grid.arrange(plot_sign, top = sample_legend)
-  plot_sign = grid.arrange(plot_sign, top = p0_note)                                   
+  plot_sign = grid.arrange(plot_sign, top = sample_legend)                        
   plot_sign = grid.arrange(plot_sign, top = sign_legend)
   plot_sign = grid.arrange(plot_sign, top = test_legend)
   # 3 save results -----------------------------------------------------------------
-  # assemble file name
-  file_title = paste("significance",genelist_name, "samples ")
-  for (sample in all_conditions)
-    file_title = paste(file_title, sample, ", ", sep="")
-  if (match_time_norm)
-    file_title = paste(file_title, "per time point,", sep="")
-  if (selected_normalizer != "None")
-    file_title = paste(file_title, selected_normalizer)
-  file_title = paste(file_title, df_to_use, sep="")
   plot_name = paste(file_title, ".pdf", sep="")
   # save heatmaps as a pdf file
   plotdir = paste(savedir, "/plots", sep= "")
+  # handle exception when directory is too long
+  if (nchar(paste0(plotdir,"/",plot_name))>250)
+  {print(paste("Warning: directory to the plot of significant level (heatmap): ", plotdir,"/",plot_name,", exceeds 250 characters.", sep=""))
+    # compile a shorter plot name, including only "significance" and genelist_name
+    plot_name1 = paste0("significance ",genelist_name,".pdf")
+    # check if the new directory is short enough
+    if (nchar(paste0(plotdir,"/",plot_name1))>250)
+      print("Cannot save the plot. Please copy the data file to a shorter directory and try again")
+    else
+    {print(paste("The significance plot will be saved under the name '",plot_name1,"'"))
+        print("To make sure no plot is overwritten, please copy the data file to a shorter directory and try again")
+        plot_name = plot_name1}
+    }
+  
   plot_height = (length(unique(all_sign_df$gene))%/%4+1)*3 + 3
   ggsave(filename=plot_name, 
          plot=plot_sign, path = plotdir, width = 12, height = plot_height, 
          limitsize = FALSE,units = 'in')
-  # save all_sign_df as a csv file
-  csvdir = paste(savedir, "/csv_significance/", file_title,".csv", sep= "")
-  write.csv(all_sign_df, file = csvdir, row.names = FALSE)
 }
