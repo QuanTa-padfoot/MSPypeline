@@ -23,7 +23,7 @@ If you encounter a bug or want to request a feature open an issue on github.
 To use this version of MSPypeline, you would need:
 - Anaconda 3
 - Python 3.7 or 3.8
-- R >= 4.2.1 (for several types of plots)
+- R >= 4.3.0
 
 Installing MSPypeline can be done from an Anaconda Powershell Prompt. First, you should to go to a directory at which you wish to download MSPypeline to (e.g.):
 ```
@@ -33,6 +33,11 @@ cd C:\Temp
 Running the following lines would download MSPypeline from this repository, set up the virtual environment, as well as install all dependencies:
 
 ```
+if (Test-Path .\mspypeline) {
+     Write-Host "Removing the mspypeline folder from the previous installation."
+     Remove-Item .\mspypeline
+ }
+ 
 Invoke-WebRequest 'https://github.com/QuanTa-padfoot/MSPypeline/archive/refs/heads/main.zip' -OutFile .\mspypeline.zip
 
 Expand-Archive .\mspypeline.zip –DestinationPath .\
@@ -52,15 +57,15 @@ After successful installation, the Powershell prompt will print:
 Please restart your computer.
 ```
 
-Note: A timeout error sometimes occur due to Internet connection and/or the computer running too many tasks. Re-connecting to the Internet and closing unnecessary files would fix the issue.
+Note: A timeout error sometimes occur due to proxy servers. Please see the instruction from Anaconda [(link)](https://docs.anaconda.com/free/anaconda/configurations/proxy/) to solve this issue.
 
 # Getting started
 Before using MSPypeline, you need to define the R file's location in the powershell prompt (e.g.):
 ```
-$env:R_HOME = 'C:\Program Files\R\R-4.2.1'
+$env:R_HOME = 'C:\Program Files\R\R-4.3.0'
 ```
 
-If you have a different version of R, simply replace `4.2.1` with your version.
+If you have a different version of R, simply replace `4.3.0` with your version.
 
 Now you can start the GUI:
 ```
