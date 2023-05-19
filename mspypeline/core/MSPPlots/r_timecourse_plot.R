@@ -54,15 +54,17 @@ r_time_course_FC = function(df,
     all_conditions <- plot_conditions
   else
     all_conditions <- append(plot_conditions, ctrl_condition)
+  ctrl_condition = paste0(ctrl_condition, "_")
+  all_conditions = unlist(lapply(all_conditions, function(x) paste0(x,"_")))
   df_gene_cond <- df_gene %>%
-    dplyr::select(contains(all_conditions))
+    dplyr::select(starts_with(all_conditions))
   # get the timepoint vector (the second to last position in column names)
   time_vector <- c()
   for (sample in colnames(df_gene_cond))
   {t = tail(unlist(strsplit(sample, "_")), 2)[1]
     time_vector = append(time_vector, t)
   }
-  time_vector = sort(unique(time_vector))
+  time_vector = unique(time_vector)
   time_unit = ""
   while ((is.na(as.numeric(t))) && (t != ""))
   {
@@ -71,7 +73,13 @@ r_time_course_FC = function(df,
     t = substr(t,1, n-1)
   }
   if (time_unit == "")
-    time_unit = "unit not found"
+    {time_unit = "unit not found"
+    time_vector = sort(as.numeric(time_vector))
+    time_vector = as.character(time_vector)}
+   else
+    {time_vector = gsub(time_unit, "", time_vector)
+    time_vector = sort(as.numeric(time_vector))
+    time_vector = lapply(time_vector, function(x) paste0(x,time_unit))}
   # 2 Normalization -----------------------------------
   # Mean and standard dev of log2 intensities are stored in 2 dataframes: all_mean_norm and all_sd_norm
   # after processing, columns of both dataframes are named by the genes, plus two columns indicating time and condition
@@ -85,46 +93,47 @@ r_time_course_FC = function(df,
   
   # compute the fold change for each time point and add the result to df_all_norm
   starting_timepoint = time_vector[1]
-  df_t = df_gene_cond[grepl(paste("_", starting_timepoint, "_", sep=""), colnames(df_gene_cond))]
-  ctrl_col = rowMeans(df_t[grepl(ctrl_condition,colnames(df_t))], na.rm = TRUE)
+  df_t = df_gene_cond %>%
+    dplyr::select(contains(paste0("_", starting_timepoint, "_"))) %>%
+    dplyr::select(starts_with(ctrl_condition))
+  ctrl_col = rowMeans(df_t, na.rm = TRUE)
   for (t in time_vector)
   {
   timepoint = paste("_",t, "_", sep="")
-  df_t = df_gene_cond[grepl(timepoint, colnames(df_gene_cond))]
-  #print(df_t)
+  df_t = df_gene_cond %>%
+    dplyr::select(contains(timepoint))
   if (match_time_norm)
-    ctrl_col = rowMeans(df_t[grepl(ctrl_condition,colnames(df_t))], na.rm = TRUE)
+    ctrl_col = rowMeans(df_t %>% dplyr::select(starts_with(ctrl_condition)), na.rm = TRUE)
   df_norm <- df_t - ctrl_col # Normalization: subtract columns from the mean of the ctrl one
-  #print(df_norm)
   for (condition in all_conditions)
-  {samples_per_condition = grepl(condition,colnames(df_norm))
-  
+  {df_per_condition = df_norm %>%
+    dplyr::select(starts_with(condition))
   # give warning if the condition was not measured at the timepoint
-  if (sum(samples_per_condition) == 0)
+  if (ncol(df_per_condition) == 0)
   {print(paste("Warning: cannot find data for ", condition, " at timepoint ", t, sep=""))
-  
   # if at the starting timepoint: set protein level to be similar to that of ctrl_condition (i.e. fold change to be all 0)
   if (t == time_vector[1])
   {
     print(paste("The protein level of this condition was set to that of the normalizing sample (aka control): ", ctrl_condition, sep= ""))
-    logFC = rep(0, nrow(df_norm))
-    df_per_condition = data.frame("time"= rep(t,length(logFC)),
+    logFC = rep(0, nrow(df_per_condition))
+    df_per_condition_to_all = data.frame("time"= rep(t,length(logFC)),
                                   "condition"= rep(condition, length(logFC)), 
-                                  "gene"= rep(row.names(df_norm)),
+                                  "gene"= rep(row.names(df_per_condition)),
                                   "logFC"= logFC)
-    df_all_norm = rbind(df_all_norm, df_per_condition)
+    df_all_norm = rbind(df_all_norm, df_per_condition_to_all)
   }}
   else
-    {logFC = unlist(df_norm[samples_per_condition])
+    {logFC = unlist(df_per_condition)
   
-  df_per_condition = data.frame("time"= rep(t,length(logFC)),
+  df_per_condition_to_all = data.frame("time"= rep(t,length(logFC)),
                                 "condition"= rep(condition, length(logFC)), 
-                                "gene"= rep(row.names(df_norm),sum(samples_per_condition)),
+                                "gene"= rep(row.names(df_norm),ncol(df_per_condition)),
                                 "logFC"= logFC)
-  df_all_norm = rbind(df_all_norm, df_per_condition)}
+  df_all_norm = rbind(df_all_norm, df_per_condition_to_all)}
   }
   }
-  df_all_norm$time <- gsub("\\D", "", df_all_norm$time) # remove all non-digits inthe column time
+  if (time_unit != "unit not found")
+    df_all_norm$time <- gsub(time_unit, "", df_all_norm$time) # remove all non-digits inthe column time
   df_all_norm$time <- as.numeric(df_all_norm$time)
   df_all_norm = na.omit(df_all_norm) # remove all NAs
   
@@ -237,15 +246,16 @@ r_time_course_intensity = function(df,
   
   # 1: remove all irrelevant genes and conditions ---------
   df_gene <- subset(df, row.names(df) %in% genelist)  # This would also remove NA gene names
+  plot_conditions = unlist(lapply(plot_conditions, function(x) paste0(x,"_")))
   df_gene_cond <- df_gene %>%
-    dplyr::select(contains(plot_conditions))
+    dplyr::select(starts_with(plot_conditions))
   # get the timepoint vector (the second to last position in column names)
   time_vector <- c()
   for (sample in colnames(df_gene_cond))
   {t = tail(unlist(strsplit(sample, "_")), 2)[1]
   time_vector = append(time_vector, t)
   }
-  time_vector = sort(unique(time_vector))
+  time_vector = unique(time_vector)
   
   # get the time unit
   time_unit = ""
@@ -272,25 +282,26 @@ r_time_course_intensity = function(df,
   for (t in time_vector)
   {
     timepoint = paste("_",t, "_", sep="")
-    df_t = df_gene_cond[grepl(timepoint, colnames(df_gene_cond))]
-    
+    df_t = df_gene_cond %>%
+      dplyr::select(contains(timepoint))
     for (condition in plot_conditions)
-    {samples_per_condition = grepl(condition,colnames(df_t))
-     
+    {df_per_condition = df_t %>%
+        dplyr::select(starts_with(condition))
     # give warning if the condition was not measured at the timepoint
-     if (sum(samples_per_condition) == 0)
+     if (ncol(df_per_condition) == 0)
       print(paste("Warning: cannot find data for ", condition, " at timepoint ", t, sep=""))
     else
     { # otherwise, add data to df_all
-    intensity = unlist(df_t[samples_per_condition])
-    df_per_condition = data.frame("time"= rep(t,length(intensity)),
+    intensity = unlist(df_per_condition)
+    df_per_condition_to_all = data.frame("time"= rep(t,length(intensity)),
                                   "condition"= rep(condition, length(intensity)), 
-                                  "gene"= rep(row.names(df_t),sum(samples_per_condition)),
+                                  "gene"= rep(row.names(df_t),ncol(df_per_condition)),
                                   "intensity"= intensity)
-    df_all = rbind(df_all, df_per_condition)}
+    df_all = rbind(df_all, df_per_condition_to_all)}
     }
   }
-  df_all$time <- gsub("\\D", "", df_all$time) # remove all non-digits inthe column time
+  if (time_unit != "unit not found")
+    df_all$time <- gsub(time_unit, "", df_all$time) # remove all non-digits inthe column time
   df_all$time <- as.numeric(df_all$time)
   df_all = na.omit(df_all) # remove all NAs
   
