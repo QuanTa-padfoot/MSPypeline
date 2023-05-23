@@ -213,6 +213,12 @@ class MSPGUI(tk.Tk):
         #intensity_label = ttk.Label(self, text="Intensities").grid(row=7, column=1)
 
         #levels_label = ttk.Label(self, text="Levels").grid(row=7, column=2)
+        
+        # Button to reorder the level
+        reorder_level_button = ttk.Button(self, text="Reorder level", command=lambda:self.reorder_level())
+        reorder_level_button.grid(row=9, column=2, sticky=tk.W, padx=20)
+        create_tool_tip(reorder_level_button,"Reorder level of the samples and save on sample_mapping.txt, currently only available for SpectroReader")
+
         self.p_val_var = tk.IntVar(value=1)
         pval_button = ttk.Checkbutton(self, text="Use adjusted p value", variable=self.p_val_var)
         pval_button.grid(row=10, column=2, sticky=tk.W, padx=15)
@@ -416,10 +422,20 @@ class MSPGUI(tk.Tk):
             self.yaml_button["menu"].add_command(label=op, command=tk._setit(self.yaml_text, op))
 
     def update_listboxes(self):
-        # delete all experiments then add from file
+        # delete all experiments then add from file (try sample_mapping.txt first, if sample_mapping is not present then add from config)
         self.experiments_list.delete(0, "end")
-        for op in self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", []):
-            self.experiments_list.insert("end", op)
+        mapping_txt = os.path.join(self.mspinit.start_dir,"config/sample_mapping.txt")
+        try:
+            with open(mapping_txt, "r") as f:
+                next(f)
+                for line in f.readlines():
+                    op = line.split('\t')[1]
+                    op = op[:-1]
+                    self.experiments_list.insert("end", op)
+                f.close()
+        except FileNotFoundError:
+            for op in self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", []):
+                self.experiments_list.insert("end", op)
         # clear selection then select from configs
         for i, pathway in enumerate(self.mspinit.list_full_pathways):
             self.pathway_list.select_clear(i)
@@ -679,7 +695,16 @@ class MSPGUI(tk.Tk):
             note1.grid(row=1, column=0)
         else:
             selected_level = selected_level[0]
-            all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+            try:
+                all_replicates = []
+                with open(os.path.join(self.mspinit.start_dir,"config/sample_mapping.txt"), 'r') as f:
+                    next(f)
+                    for line in f.readlines():
+                        sample = line.split('\t')[1]
+                        all_replicates.append(sample[:-1])
+                    f.close()
+            except FileNotFoundError:
+                all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
             max_level = len(all_replicates[0].split("_")) - 1
             all_sample = ["default"]
             if max_level == selected_level:
@@ -779,7 +804,17 @@ class MSPGUI(tk.Tk):
         window = tk.Toplevel()
         window.geometry("500x400")
         window.title("Selecting samples for plotting timecourse Fold Change")
-        all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+        # get sample names from sample_mapping.txt; if not present then take it from config
+        try:
+            all_replicates = []
+            with open(os.path.join(self.mspinit.start_dir, "config/sample_mapping.txt"), 'r') as f:
+                next(f)
+                for line in f.readlines():
+                    sample = line.split('\t')[1]
+                    all_replicates.append(sample[:-1])
+                f.close()
+        except FileNotFoundError:
+            all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
 
         # Remove the last two levels in sample display
         all_sample = []
@@ -910,6 +945,82 @@ class MSPGUI(tk.Tk):
                 f"{plot_name}_var": intensity_list,
                 f"{plot_name}_levels": level_list
             })
+    
+    def reorder_level(self):
+        """Reorder the level of the samples. Settings are saved in the text file sample_mapping.txt
+        Called by clicking the reorder_level_button"""
+        window = tk.Toplevel()
+        window.title("Reordering level")
+        mapping_txt = os.path.join(self.mspinit.start_dir,"config/sample_mapping.txt")
+
+        try:
+            with open(mapping_txt, "r") as f:
+                next(f)
+                original_name_example = f.readline().split('\t')[0]
+                f.close()
+        except FileNotFoundError:
+            original_name_example = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])[0]
+        original_level_dict = {}
+        n = 0
+        for element in original_name_example.split('_'):
+            original_level_dict[element] = n
+            n += 1
+        instruction_note = ttk.Label(window, text="You can change the level in analysis_design by typing the new name of a sample.\n"
+                                                  "Other samples' names will be changed accordingly.\n"
+                                                  "E.g. Name as in data file: Abc_Def_Ghi\n             Type new name: Ghi_Abc_Def\n   ")
+        instruction_note.grid(row=0, column=0)
+        orig_name_note = ttk.Label(window, text=f"Name as in the data file: {original_name_example}")
+        orig_name_note.grid(row=1, column=0)
+        new_name_note = ttk.Label(window, text=f"Enter the new name below")
+        new_name_note.grid(row=2, column=0)
+
+        inputtxt = tk.Entry(window)
+        inputtxt.grid(row=3, column=0, padx=5, sticky=tk.W, pady=20)
+
+        remove_config_note = ttk.Label(window, text="After pressing Confirm, mspypeline will recompile the config.yml file\n"
+                                                    "This might take a while")
+        remove_config_note.grid(row=4, column=0)
+
+        def confirm_new_level():
+            new_name_example = inputtxt.get().split('_')
+            new_level_order = []
+            if len(new_name_example) != n:
+                error_note = tk.Label(window,
+                                      text="Cannot update the new level. Please check the spelling and try again")
+                error_note.grid(row=6, column=0)
+                return
+            try:
+                for element in new_name_example:
+                    new_level_order.append(original_level_dict[element])
+                try:
+                    with open(mapping_txt, 'r') as f:
+                        all_replicates = []
+                        next(f)
+                        for line in f.readlines():
+                            all_replicates.append(line.split('\t')[0])
+                        f.close()
+                except FileNotFoundError:
+                    all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+                with open(mapping_txt, 'w') as f:
+                    f.write('Name as in data file\tNew name\n')
+                    for name in all_replicates:
+                        old_name = name.split('_')
+                        new_name = [old_name[n] for n in new_level_order]
+                        f.write(f"{name}\t{'_'.join(new_name)}\n")
+                    f.close()
+                # delete the old config file and compile it again
+                os.remove(os.path.join(self.mspinit.start_dir, "config/config.yml"))
+                self.update_button()
+                print('New level order updated in sample_mapping.txt. Please delete the config.yml file and run Update again')
+                window.destroy()
+            except KeyError:
+                error_note = tk.Label(window, text="Cannot update the new level. Please check the spelling and try again")
+                error_note.grid(row=6, column=0)
+        confirm_button = ttk.Button(window, text="Confirm", command=lambda: confirm_new_level())
+        confirm_button.grid(row=5, column=0)
+
+        window.geometry("500x300")
+        window.mainloop()
 
 class WarningBox(tk.Toplevel):
     def __init__(self, title='', message=''):
