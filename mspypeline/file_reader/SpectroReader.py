@@ -242,5 +242,19 @@ class SpectroReader(BaseReader):
         for col in [col for col in df.columns if '.Quantity' in col or '.IBAQ' in col or '.iBAQ' in col or '.LFQ' in col]:
             if not is_numeric_dtype(df[col]):
                 df[col] = df[col].apply(lambda x: convert_string(x))
-
+        
+        # rename columns according to sample_mapping.txt
+        try:
+            """Map the new column names from sample_mapping.txt to the dataframe columns"""
+            sample_mapping = os.path.join(self.start_dir, "config/sample_mapping.txt")
+            with open(sample_mapping, "r") as f:
+                next(f)  # skip the title line
+                for line in f.readlines():
+                    sample_name = line.split('\t')
+                    old_col = df.filter(regex=sample_name[0]).columns.to_list()
+                    rename_col_dict = {col: col.replace(sample_name[0], sample_name[1][:-1]) for col in old_col}
+                    df.rename(columns=rename_col_dict, inplace=True)
+                f.close()
+        except FileNotFoundError:
+            print("File sample_mapping.txt not found in the config folder")
         return df
