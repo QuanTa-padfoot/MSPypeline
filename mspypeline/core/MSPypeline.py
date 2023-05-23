@@ -1009,9 +1009,10 @@ class MSPGUI(tk.Tk):
                         f.write(f"{name}\t{'_'.join(new_name)}\n")
                     f.close()
                 # delete the old config file and compile it again
-                os.remove(os.path.join(self.mspinit.start_dir, "config/config.yml"))
+                os.remove(self.mspinit.file_path_yaml)
+                self.update_yaml_options()
                 self.update_button()
-                print('New level order updated in sample_mapping.txt. Please delete the config.yml file and run Update again')
+                print('New level order updated in sample_mapping.txt.')
                 window.destroy()
             except KeyError:
                 error_note = tk.Label(window, text="Cannot update the new level. Please check the spelling and try again")
