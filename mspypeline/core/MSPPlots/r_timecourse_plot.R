@@ -390,6 +390,9 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   library(scales)
   library(ggtext)  # for coloring axes' text
   colnames(df) = c("time", "condition", "gene", "intensity")
+  if (length(unique(df$condition)) == 1)
+    {print('Statistical testing is skipped since only one condition was selected')
+    return()}
   if (match_time_norm)
     print("Warning: normalization per timepoint was chosen. Statistical testings might not reflect true significant differences between conditions")
   df$time = sapply(df$time, function(x) paste(x))
