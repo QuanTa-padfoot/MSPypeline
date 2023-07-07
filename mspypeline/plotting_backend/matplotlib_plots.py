@@ -553,6 +553,11 @@ def save_pca_results(
                                           color_map=base_color_map, marker_size=legend_marker_size)
     fig.legend(handles=legend_elements, bbox_to_anchor=(1.02, 0.5), loc="center left", frameon=False, fontsize=20)
     fig.tight_layout(rect=[0.03, 0.03, 1, 0.95])
+    # Export pca coordinates:
+    for element in range(n_components):
+        pca_data.loc[f"PC_{element+1}"] /= singular_values[element]
+    path, csv_name = get_path_and_name_from_kwargs(name="PCA_coordinate", pathway="outliers_detection_and_comparison", **kwargs)
+    save_csv_fn(path,csv_name, pca_data)
     return fig, axarr
 
 
