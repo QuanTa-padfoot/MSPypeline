@@ -571,6 +571,8 @@ class MSPGUI(tk.Tk):
         ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         elif self.err == NotImplementedError:
             self.popup_window(title='Status Update', message=('A requested task is currently not implemented\nError code: ' + self.err.__name__), error = True)
+        elif self.err == FileNotFoundError:
+            self.popup_window(title='Status Update', message=('The directory you are working with is likely too long to save results\nCopy your data to another directory and try again :D\nError code: ' + self.err.__name__), error = True)
         else:
             self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
