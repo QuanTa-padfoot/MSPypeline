@@ -144,8 +144,8 @@ r_time_course_FC = function(df,
     facet_wrap( ~ gene, ncol=4, scales = "free") +
     stat_summary(fun = "mean", geom="line",  size=1) +
     stat_summary(fun = "mean", geom="point",  size=2)+
-    stat_summary(fun.data = "mean_se", geom = "errorbar", size=1, 
-                 width = length(unique(df_all_norm$time))/8,
+    stat_summary(fun.data = "mean_se", geom = "errorbar", size=0.5, 
+                 width = 1,
                  fun.args = list(mult=1))
   else
     plot_FC = plot_FC + geom_point(aes(fill=condition), shape=16, size=2) +
@@ -166,10 +166,7 @@ r_time_course_FC = function(df,
           legend.title = element_blank(),
           legend.position = "top",
           # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
-          strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
-    #scale_colour_manual(values = blue4) +
-    scale_x_continuous(breaks = unique(df_all_norm$time), 
-                       limits = c(min(unique(df_all_norm$time)), max(unique(df_all_norm$time))))
+          strip.text.x = element_text(size = 14, face = "bold"))  # remove axis labels of facet plots
   # align the y axis if align_yaxis = TRUE
   if (align_yaxis)
     plot_FC = plot_FC + 
@@ -312,8 +309,8 @@ r_time_course_intensity = function(df,
     facet_wrap( ~ gene, ncol=4, scales = "free") +
     stat_summary(fun = "mean", geom="line",  size=1) +
     stat_summary(fun = "mean", geom="point",  size=2)+
-    stat_summary(fun.data = "mean_se", geom = "errorbar", size=1, 
-                 width = length(unique(df_all$time))/8,
+    stat_summary(fun.data = "mean_se", geom = "errorbar", size=0.5, 
+                 width = 1,
                  fun.args = list(mult=1))
   else
     plot_intensity = plot_intensity + geom_point(aes(fill=condition), shape=16, size=2) +
@@ -334,10 +331,7 @@ r_time_course_intensity = function(df,
           legend.title = element_blank(),
           legend.position = "top",
           # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
-          strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
-    #scale_colour_manual(values = blue4) +
-    scale_x_continuous(breaks = unique(df_all$time), 
-                       limits = c(min(unique(df_all$time)), max(unique(df_all$time))))
+          strip.text.x = element_text(size = 14, face = "bold"))  # remove axis labels of facet plots
   # align the y axis if align_yaxis = TRUE
   if (align_yaxis)
     plot_intensity = plot_intensity + 
