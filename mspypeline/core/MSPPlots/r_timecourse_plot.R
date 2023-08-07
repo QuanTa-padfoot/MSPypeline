@@ -333,7 +333,7 @@ r_time_course_intensity = function(df,
           legend.position = "top",
           # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
           strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
-  scale_x_continuous(limits = c(min(unique(df_all_norm$time)), max(unique(df_all_norm$time))))
+  scale_x_continuous(limits = c(min(unique(df_all$time)), max(unique(df_all$time))))
   # align the y axis if align_yaxis = TRUE
   if (align_yaxis)
     plot_intensity = plot_intensity + 
