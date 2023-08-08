@@ -387,6 +387,12 @@ class MSPGUI(tk.Tk):
                 with open(target_filedir, 'w') as target:
                     for line in gene_list:
                         target.write(line)
+                if list_type == 'GO':
+                    self.mspinit.list_full_gos.append(filename_nodir)
+                    self.go_term_list.insert("end", filename_nodir)
+                elif list_type == 'pathways':
+                    self.mspinit.list_full_pathways.append(filename_nodir)
+                    self.pathway_list.insert("end", filename_nodir)
     
     def style_handler(self):
         if self.tk.call("ttk::style", "theme", "use") == "azure-dark":
