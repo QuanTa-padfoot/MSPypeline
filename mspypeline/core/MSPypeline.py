@@ -184,24 +184,26 @@ class MSPGUI(tk.Tk):
         self.go_term_list.configure(exportselection=False)
         for x in self.mspinit.list_full_gos:
             self.go_term_list.insert("end", x)
-
-        
-        #scrollbar = ttk.Scrollbar(orient=tk.VERTICAL, command=self.go_term_list.yview)
-        #self.go_term_list.config(yscrollcommand=scrollbar.set)
-        #scrollbar.grid(row=4, column=0, columnspan=3, sticky=tk.W, padx=20, )
-
         self.go_term_list.grid(row=6, column=0, columnspan=3,sticky=tk.W, padx=20)
+        scrollbar_go = tk.Scrollbar(self,orient='vertical', command=self.go_term_list.yview)
+        scrollbar_go.grid(row=6, column=2, sticky='nes', padx=20)
+        self.go_term_list.config(yscrollcommand=scrollbar_go.set)
 
         self.pathway_list = tk.Listbox(self, selectmode="multiple", height=5,
                                        width=len(max(self.mspinit.list_full_gos, key=len)))
         self.pathway_list.configure(exportselection=False)
         for x in self.mspinit.list_full_pathways:
             self.pathway_list.insert("end", x)
-
         self.pathway_list.grid(row=8, column=0, columnspan=3, sticky=tk.W, padx=20)
+        scrollbar_pathway = tk.Scrollbar(self,orient='vertical', command=self.pathway_list.yview)
+        scrollbar_pathway.grid(row=8, column=2, sticky='nes', padx=20)
+        self.pathway_list.config(yscrollcommand=scrollbar_pathway.set)
 
         self.experiments_list = tk.Listbox(self, height=5, width=30)
         self.experiments_list.grid(row=10, column=0, columnspan=2, sticky=tk.W, padx=20)
+        scrollbar_experiment = tk.Scrollbar(self,orient='vertical', command=self.experiments_list.yview)
+        scrollbar_experiment.grid(row=10, column=1, sticky='nes', padx=20)
+        self.experiments_list.config(yscrollcommand=scrollbar_experiment.set)
 
         report_button = ttk.Button(self, text="Create Report",
                                   command=lambda: self.report_button())
@@ -730,6 +732,9 @@ class MSPGUI(tk.Tk):
                 sample1_list = tk.Listbox(window, selectmode="multiple", height=15, width=len(max(all_sample, key=len))+2)
                 sample1_list.configure(exportselection=False)
                 sample1_list.grid(row=1, column=0, sticky=tk.W, padx=20)
+                scrollbar_sample1 = tk.Scrollbar(window,orient='vertical', command=sample1_list.yview)
+                scrollbar_sample1.grid(row=1, column=0, sticky='nes', padx=20)
+                sample1_list.config(yscrollcommand=scrollbar_sample1.set)
 
                 filler_label = tk.Label(window, text= "  ")
                 filler_label.grid(row=0, column=1)
@@ -739,6 +744,9 @@ class MSPGUI(tk.Tk):
                 sample2_list = tk.Listbox(window, selectmode="multiple", height=15, width=len(max(all_sample, key=len)) + 2)
                 sample2_list.configure(exportselection=False)
                 sample2_list.grid(row=1, column=2, sticky=tk.W, padx=20)
+                scrollbar_sample2 = tk.Scrollbar(window,orient='vertical', command=sample2_list.yview)
+                scrollbar_sample2.grid(row=1, column=2, sticky='nes', padx=20)
+                sample2_list.config(yscrollcommand=scrollbar_sample2.set)
 
                 # Add a default option, if chosen then the all combinations will be plotted
 
@@ -849,6 +857,9 @@ class MSPGUI(tk.Tk):
                                        width=len(max(all_sample, key=len))+2)
             normalizing_sample.configure(exportselection=False)
             normalizing_sample.grid(row=3, column=0, columnspan=2, sticky=tk.W, padx=20)
+            scrollbar_norm = tk.Scrollbar(window,orient='vertical', command=normalizing_sample.yview)
+            scrollbar_norm.grid(row=3, column=1, sticky='nes', padx=20)
+            normalizing_sample.config(yscrollcommand=scrollbar_norm.set)
 
             time_match_norm = tk.IntVar(
                 value=int(self.mspinit.configs["plot_r_timecourse_settings"].get("matching_time_normalization")))
@@ -860,8 +871,10 @@ class MSPGUI(tk.Tk):
             sample_list = tk.Listbox(window, selectmode="multiple", height=5,
                                         width=len(max(all_sample, key=len))+2)
             sample_list.configure(exportselection=False)
-
             sample_list.grid(row=6, column=0, columnspan=2, sticky=tk.W, padx=20)
+            scrollbar_sample = tk.Scrollbar(window,orient='vertical', command=sample_list.yview)
+            scrollbar_sample.grid(row=6, column=1, sticky='nes', padx=20)
+            sample_list.config(yscrollcommand=scrollbar_sample.set)
 
             # Add a no normalizer option, if chosen then the intensities will be plotted instead of fold change
             normalizing_sample.insert("end", "None")
