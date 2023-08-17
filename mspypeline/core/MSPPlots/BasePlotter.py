@@ -1604,7 +1604,18 @@ class BasePlotter:
         pca: PCA = PCA(n_components=n_components).fit(data_transform)
         df = pd.DataFrame(pca.transform(data_transform).T, columns=data_input.columns,
                           index=[f"PC_{i}" for i in range(1, n_components + 1)])
-
+        df.columns.names = [f"level_{level}", "sample_name"]
+        if level == 0:
+            df.columns.names = ["level_0", "sample_name"]
+        else:
+            above_level, cur_level, sample_name = [], [], []
+            for sample in df.columns:
+                level_split = sample[0].rpartition("_")
+                above_level.append(level_split[0])
+                cur_level.append(level_split[2])
+                sample_name.append(sample[1])
+            df.columns = pd.MultiIndex.from_arrays([above_level, cur_level, sample_name], 
+                                                   names=[f"level_{level-1}", f"level_{level}", "sample_name"])
         return {"pca_data": df, "pca_fit": pca}
 
     @add_end_docstrings(plot_para_return_docstring.format(
@@ -1621,8 +1632,15 @@ class BasePlotter:
           dimensionality reduction (PCA) using ``sklearn.decomposition.PCA``. Multiple different analysis options can be
           chosen to generate a PCA (see: :ref:`multiple option config <default-yaml>`).
         | The results do not change in dependence on the chosen level, however, determining the level on which the data
-          should be compared influences the coloring of the scatter elements. Each group of the selected level is
-          colored differently. The data is plotted and saved using
+          should be compared influences the coloring and shaping of the scatter elements. Each group of the selected level is
+          colored differently. If the chosen level is not 0, each group of the level above the selected level is 
+          shaped differently. 
+        | If 2 components were selected, the loadings for the 2 PCs are retrieved from ``sklearn.decomposition.PCA.components_``
+          and plotted in a separate plot (1 dot = 1 protein). Protein names corresponding to the loadings are retrieved from 
+          ``sklearn.decomposition.PCA.feature_names_in_``. The 10 proteins that are the most distant from the center 
+          (distance = PC1^2 + PC2^2) are highlighted, unless pathway analysis list(s) are selected (i.e. self.interesting_proteins),
+          in which case the proteins in these list(s) will be highlighted instead. 
+        | The data is plotted and saved using
           :func:`~mspypeline.plotting_backend.matplotlib_plots.save_pca_results`.
 
         | To view adjustable parameters see "plot_pca_overview_settings:" in the :ref:`Adjustable Options Configs
@@ -1642,6 +1660,7 @@ class BasePlotter:
                 if data:
                     plot_kwargs = dict(intensity_label=self.intensity_label_names[df_to_use],
                                        df_to_use=df_to_use, level=level, save_path=self.file_dir_descriptive,
+                                       interesting_proteins=self.interesting_proteins,
                                        exp_has_techrep=self.experiment_has_techrep)
                     plot_kwargs.update(**kwargs)
                     plot = matplotlib_plots.save_pca_results(**data, **plot_kwargs)
