@@ -1639,7 +1639,9 @@ class BasePlotter:
           and plotted in a separate plot (1 dot = 1 protein). Protein names corresponding to the loadings are retrieved from 
           ``sklearn.decomposition.PCA.feature_names_in_``. The 10 proteins that are the most distant from the center 
           (distance = PC1^2 + PC2^2) are highlighted, unless pathway analysis list(s) are selected (i.e. self.interesting_proteins),
-          in which case the proteins in these list(s) will be highlighted instead. 
+          in which case the proteins in these list(s) will be highlighted instead. A version of the PCA loadings plot without the protein
+          names is included so users can label them to their liking.
+        | The PCA coordinates are exported in csv format.
         | The data is plotted and saved using
           :func:`~mspypeline.plotting_backend.matplotlib_plots.save_pca_results`.
 
