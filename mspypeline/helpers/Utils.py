@@ -187,9 +187,10 @@ def dict_depth(d: dict) -> int:
     return level
 
 
-def get_legend_elements(labels: list, color_map: Optional[dict] = None, marker_size:Optional[int] = None):
+def get_legend_elements(labels: list, color_map: Optional[dict] = None, marker_size:Optional[int] = None,
+                       shape_map: Optional[dict] = None, one_marker:Optional[str] = "o"):
     """
-        Returns custom legend elements based on a list of labels and an optional color map.
+        Returns custom legend elements based on a list of labels and an optional color map or shape map.
         These elements can be passed to a legend via the 'handles' parameter
 
         Parameters
@@ -198,14 +199,24 @@ def get_legend_elements(labels: list, color_map: Optional[dict] = None, marker_s
             list of strings
         color_map:
             dict of strings, with keys being the name of a label and values the corresponding color
+        shape_map:
+            dict of strings, with keys being the name of a label and values the corresponding shape.
+            If shape_map is specified, color_map will be ignored and icons will be black
+        one_marker:
+            string specifying the shape of point if shape_map is not used (default is circle)
 
     """
     if color_map is None:
         color_map = {name: f"C{i}" for i, name in enumerate(labels)}
     if marker_size is None:
         marker_size=10
-    legend_elements = [Line2D([0], [0], marker='o', color='w', label=name.replace("_", " "),
+    if shape_map is None:
+        legend_elements = [Line2D([0], [0], marker=one_marker, color='w', label=name.replace("_", " "),
                               markerfacecolor=color_map.get(name, "blue"), markersize=marker_size)
+                       for name in labels]
+    else:
+        legend_elements = [Line2D([0], [0], marker=shape_map.get(name, "s"), color='w', label=name.replace("_", " "),
+                              markerfacecolor="black", markersize=marker_size)
                        for name in labels]
     return legend_elements
 
