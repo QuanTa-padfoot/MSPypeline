@@ -468,12 +468,12 @@ def save_volcano_results(
 @save_plot("pca_overview")
 @format_docstrings(kwargs=_get_path_and_name_kwargs_doc)
 def save_pca_results(
-        pca_data: pd.DataFrame, pca_fit: PCA = None, normalize: bool = True, intensity_label: str = "Intensity",
-        color_map: Optional[dict] = None, show_suptitle: bool = True, marker_size: int = 150,
+        pca_data: pd.DataFrame, pca_fit: PCA = None, interesting_proteins = None, normalize: bool = True, intensity_label: str = "Intensity",
+        color_map: Optional[dict] = None, shape_map: Optional[dict] = None, show_suptitle: bool = True, marker_size: int = 150,
         legend_marker_size: int = 12, close_plots: str = "all", exp_has_techrep: bool = False, **kwargs
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
-    Saves image containing the pca results with prefix: {{name}}
+    Saves image containing the pca results with prefix: {{name}} and the PCA coordinates
 
     Parameters
     ----------
@@ -487,6 +487,8 @@ def save_pca_results(
         figure title
     color_map
         mapping from column name to color if custom colors are wanted
+    shape_map
+        mapping from column name to shape if custom shapes are wanted
     show_suptitle:
         should the figure title be shown
     marker_size
@@ -505,7 +507,16 @@ def save_pca_results(
         plt.close(close_plots)
     n_components = pca_data.shape[0]
     singular_values = np.ones(n_components)
-    base_color_map = {value: f"C{i}" for i, value in enumerate(pca_data.columns.get_level_values(0).unique())}
+    if pca_data.columns.names == ["level_0", "sample_name"]:
+        base_color_map = {value: f"C{i}" for i, value in enumerate(pca_data.columns.get_level_values(0).unique())}
+    else:
+        base_color_map = {value: f"C{i}" for i, value in enumerate(pca_data.columns.get_level_values(1).unique())}
+        default_shape_list = "o^v<>PXDdp*hH+x1234"
+        while len(pca_data.columns.get_level_values(0).unique()) > len(default_shape_list):
+            default_shape_list.append(default_shape_list)
+        base_shape_map = {value: default_shape_list[i] for i, value in enumerate(pca_data.columns.get_level_values(0).unique())}
+        shape_map = {} if shape_map is None else shape_map     
+        base_shape_map.update(shape_map)
     color_map = {} if color_map is None else color_map
     base_color_map.update(color_map)
     if normalize and pca_fit is None:
@@ -520,38 +531,118 @@ def save_pca_results(
         pca_var = ["nan" for _ in range(len(pca_fit.n_components_))]
 
     if n_components == 2:
-        fig, axarr = plt.subplots(1, 1, figsize=(14, 14))
-        ax = axarr
-        ax.scatter(
-            pca_data.loc["PC_1"] / singular_values[0],
-            pca_data.loc["PC_2"] / singular_values[1],
-            s=marker_size, edgecolors="none",
-            c=[base_color_map.get(name, "blue") for name in pca_data.columns.get_level_values(0)])
-        ax.set_xlabel("PC 1 - {0}".format(pca_var[0]), fontsize=22, labelpad=20)
-        ax.set_ylabel("PC 2 - {0}".format(pca_var[1]), fontsize=22, labelpad=20)
-        ax.tick_params(axis="both", labelsize=18)
+        fig, axarr = plt.subplots(nrows=3, ncols=1, figsize=(14, 42))
+        if pca_data.columns.names == ["level_0", "sample_name"]:
+            axarr.scatter(
+                pca_data.loc["PC_1"] / singular_values[0],
+                pca_data.loc["PC_2"] / singular_values[1],
+                s=marker_size, edgecolors="none",
+                c=[base_color_map.get(name, "blue") for name in pca_data.columns.get_level_values(0)])
+            legend_elements = get_legend_elements(labels=pca_data.columns.get_level_values(0).unique(),
+                                          color_map=base_color_map, marker_size=legend_marker_size)
+            color_level = "level 0"
+        else:
+            for shape in pca_data.columns.get_level_values(0).unique():
+                pca_data_subset = pca_data.loc[:,pd.IndexSlice[shape, :, :]]
+                axarr[0].scatter(
+                    pca_data_subset.loc["PC_1"] / singular_values[0],
+                    pca_data_subset.loc["PC_2"] / singular_values[1],
+                    s=marker_size, edgecolors="none",
+                    c=[base_color_map.get(name, "blue") for name in pca_data_subset.columns.get_level_values(1)],
+                    marker=base_shape_map.get(shape, "o"))
+            # Color legend
+            legend_elements = get_legend_elements(labels=pca_data.columns.get_level_values(1).unique(),
+                                          color_map=base_color_map, marker_size=legend_marker_size, one_marker = "s")
+            color_level = pca_data.columns.names[1].replace("_", " ")
+            # marker legend
+            legend_shape =  get_legend_elements(labels=pca_data.columns.get_level_values(0).unique(),
+                                                marker_size=legend_marker_size, shape_map=base_shape_map)
+            shape_level = pca_data.columns.names[0].replace("_", " ")
+        axarr[0].set_xlabel("PC 1 - {0}".format(pca_var[0]), fontsize=22, labelpad=20)
+        axarr[0].set_ylabel("PC 2 - {0}".format(pca_var[1]), fontsize=22, labelpad=20)
+        axarr[0].tick_params(axis="both", labelsize=18)
+        
+        # Plot the PCA loadings
+        loadings = pca_fit.components_
+        axarr[1].scatter(*loadings, alpha = 0.3, color = 'darkgrey', s=marker_size/2)
+        axarr[1].set_xlabel("Loadings on PC1",fontsize=22, labelpad=20)
+        axarr[1].set_ylabel("Loadings on PC2",fontsize=22, labelpad=20)
+        axarr[1].tick_params(axis="both", labelsize=18)
+
+        axarr[2].scatter(*loadings, alpha = 0.3, color = 'darkgrey', s=marker_size/2)
+        axarr[2].set_xlabel("Loadings on PC1",fontsize=22, labelpad=20)
+        axarr[2].set_ylabel("Loadings on PC2",fontsize=22, labelpad=20)
+        axarr[2].tick_params(axis="both", labelsize=18)
+
+        loadings = pd.DataFrame(loadings)
+        loadings.rename(index={0:'PC1',1: 'PC2'}, columns={i: pca_fit.feature_names_in_[i] for i in range(pca_fit.n_features_)}, inplace = True)
+        loadings = loadings.transpose()
+        # If list of proteins of interest chosen (pathway list) then annotate them, otherwise annotate the 10 most extreme proteins
+        if interesting_proteins.values():
+            all_pathway_proteins = set.union(*(set(x) for x in interesting_proteins.values()))
+            loadings = loadings.filter(all_pathway_proteins, axis=0)
+        else:
+            loadings["pca_distance"] = loadings["PC1"]**2 + loadings["PC2"]**2
+            loadings.sort_values("pca_distance", inplace=True, ascending=False)
+            loadings = loadings.head(n=10)
+        axarr[1].scatter(loadings["PC1"], loadings["PC2"], color = 'black', s=marker_size/2)
+        axarr[2].scatter(loadings["PC1"], loadings["PC2"], color = 'black', s=marker_size/2)
+        axarr[1].set_title("Loadings for PCA components, with labels", fontsize=25)
+        axarr[2].set_title("Loadings for PCA components, no labels", fontsize=25)
+        texts = []
+        for gene_name, PC1_loading, PC2_loading in zip(loadings.index, loadings["PC1"], loadings["PC2"]):
+            texts.append(axarr[1].text(PC1_loading, PC2_loading, gene_name, ha="center", va="center", fontsize=15,
+                                 color="black"))
+        adjust_text(texts, arrowprops=dict(width=0.15, headwidth=0, color='gray', alpha=0.6), ax=axarr[1])
     else:
-        fig, axarr = plt.subplots(n_components, n_components, figsize=(14, 14))
+        fig, axarr = plt.subplots(n_components, n_components, figsize=(20, 20))
         for row in range(n_components):
             row_pc = row + 1
             for col in range(n_components):
                 col_pc = col + 1
                 if row > col:
                     ax = axarr[col, row]
-                    ax.scatter(
-                        pca_data.loc[f"PC_{row_pc}"] / singular_values[row],
-                        pca_data.loc[f"PC_{col_pc}"] / singular_values[col],
-                        s=marker_size, edgecolors=None,
-                        c=[base_color_map.get(name, "blue") for name in pca_data.columns.get_level_values(0)])
+                    if pca_data.columns.names == ["level_0", "sample_name"]:
+                        ax.scatter(
+                            pca_data.loc[f"PC_{row_pc}"] / singular_values[row],
+                            pca_data.loc[f"PC_{col_pc}"] / singular_values[col],
+                            s=marker_size, edgecolors=None,
+                            c=[base_color_map.get(name, "blue") for name in pca_data.columns.get_level_values(0)])
+                        legend_elements = get_legend_elements(labels=pca_data.columns.get_level_values(0).unique(),
+                                          color_map=base_color_map, marker_size=legend_marker_size)
+                        color_level = "level 0"
+                    else:
+                        for shape in pca_data.columns.get_level_values(0).unique():
+                            pca_data_subset = pca_data.loc[:,pd.IndexSlice[shape, :, :]]
+                            ax.scatter(
+                                pca_data_subset.loc[f"PC_{row_pc}"] / singular_values[row],
+                                pca_data_subset.loc[f"PC_{col_pc}"] / singular_values[col],
+                                s=marker_size, edgecolors=None,
+                                c=[base_color_map.get(name, "blue") for name in pca_data_subset.columns.get_level_values(1)],
+                                marker=base_shape_map.get(shape, "o"))
+                        # Color legend
+                        legend_elements = get_legend_elements(labels=pca_data.columns.get_level_values(1).unique(),
+                                          color_map=base_color_map, marker_size=legend_marker_size, one_marker = "s")
+                        color_level = pca_data.columns.names[1].replace("_", " ")
+                        # marker legend
+                        legend_shape =  get_legend_elements(labels=pca_data.columns.get_level_values(0).unique(),
+                                                marker_size=legend_marker_size, shape_map=base_shape_map)
+                        shape_level = pca_data.columns.names[0].replace("_", " ")
                     ax.set_xlabel(f"PC {row_pc} - {pca_var[0]}", fontsize=22, labelpad=20)
                     ax.set_ylabel(f"PC {col_pc} - {pca_var[1]}", fontsize=22, labelpad=20)
                     ax.tick_params(axis="both", labelsize=18)
 
     if show_suptitle:
         fig.suptitle(intensity_label + (TECHREP_SUFFIX if exp_has_techrep else ""), fontsize=30)
-    legend_elements = get_legend_elements(labels=pca_data.columns.get_level_values(0).unique(),
-                                          color_map=base_color_map, marker_size=legend_marker_size)
-    fig.legend(handles=legend_elements, bbox_to_anchor=(1.02, 0.5), loc="center left", frameon=False, fontsize=20)
+    fig.legend(handles=legend_elements, bbox_to_anchor=(1.01, 0.93), loc="upper left", 
+               title=f"Color ({color_level})", title_fontsize=20, frameon=False, fontsize=20)
+    if legend_shape is not None:
+        if n_components == 2:
+            fig.add_artist(fig.legend(handles=legend_shape, bbox_to_anchor=(1.01, 0.655), loc="lower left",  
+                                      title=f"Shape ({shape_level})", title_fontsize=20,frameon=False, fontsize=20))
+        else:
+            fig.add_artist(fig.legend(handles=legend_shape, bbox_to_anchor=(1.01, 0.2), loc="lower left", 
+                                      title=f"Shape ({shape_level})", title_fontsize=20,frameon=False, fontsize=20))
     fig.tight_layout(rect=[0.03, 0.03, 1, 0.95])
     # Export pca coordinates:
     for element in range(n_components):
