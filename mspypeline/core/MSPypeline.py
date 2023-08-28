@@ -903,6 +903,10 @@ class MSPGUI(tk.Tk):
             except ValueError:
                 normalizing_sample.select_set(0)
 
+            # Add note to do pathway analysis if one wants to get the timecourse data
+            note2 = tk.Label(window, text="To get the protein intensities, please also do a Pathway analysis")
+            note2.grid(row=7,column=0, sticky=tk.W)
+            
             def update_timecourse_settings():
                 samples_to_plot = []
                 errorbar = plot_errorbar.get()
