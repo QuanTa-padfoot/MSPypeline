@@ -642,7 +642,7 @@ class MSPGUI(tk.Tk):
             row = self.heading_length + self.number_of_plots
             int_var = tk.IntVar(value=1)
             self.normalizer_text = tk.StringVar(value="None")
-            self.normalizer_button = ttk.OptionMenu(self, self.normalizer_text, *self.normalize_options)
+            self.normalizer_button = ttk.OptionMenu(self, self.normalizer_text, self.normalize_options[0], *self.normalize_options)
             self.normalizer_button.grid(row=row, column=col)
 
             self.number_of_plots += 1
@@ -651,7 +651,7 @@ class MSPGUI(tk.Tk):
             row = self.heading_length + self.number_of_plots
             int_var = tk.IntVar(value=1)
             self.normalizer_text = tk.StringVar(value="None")
-            self.normalizer_button = ttk.OptionMenu(tab, self.normalizer_text, *self.normalize_options)
+            self.normalizer_button = ttk.OptionMenu(tab, self.normalizer_text, self.normalize_options[0], *self.normalize_options)
             self.normalizer_button.grid(row=row, column=col, sticky=tk.W, padx = 8)
 
             self.number_of_plots += 1
