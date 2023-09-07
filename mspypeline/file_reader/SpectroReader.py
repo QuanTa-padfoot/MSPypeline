@@ -189,7 +189,8 @@ class SpectroReader(BaseReader):
             self.dictizeString(parts[1], final_value, branch)
         else:
             if parts[0] in dictionary:
-                dictionary[parts[0]] += 1
+                # This part is True when there are duplicate sample names. Best to report this as an error
+                raise ValueError(f"Found duplicate sample name for [{final_value}], please rename one(s) of these samples differently.")
             else:
                 dictionary[parts[0]] = final_value
     
