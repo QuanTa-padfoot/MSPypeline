@@ -181,8 +181,8 @@ class BasePlotter:
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
-        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales", "ggtext")
-        r_bioconducter_package_names = ("limma", "MBQN", "preprocessCore", "EnhancedVolcano")
+        r_package_names = ("BiocManager", "gtools", "egg", "dplyr", "data.table", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales", "ggtext")
+        r_bioconducter_package_names = ("limma")
         install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
     @classmethod
@@ -1484,9 +1484,6 @@ class BasePlotter:
         # import the r_timecourse_plot.R script
         ro.r(f'''source("{r_script_path}")''')
         # get plot settings from configs
-        plot_errorbar = self.configs["plot_r_timecourse_settings"].get("plot_errorbar")
-        align_yaxis =self.configs["plot_r_timecourse_settings"].get("align_yaxis")
-        match_time_norm = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
         savedir = self.file_dir_timecourse.replace('\\', '/')
         ctrl_condition = self.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
         print(f"Ctrl condition {ctrl_condition}")
@@ -1503,13 +1500,14 @@ class BasePlotter:
         if not os.path.exists(signdir):
             os.makedirs(signdir)
             
-        # add variables to the R environment
+        # add variables to the R  global environment
         ro.globalenv['plot_conditions'] = ro.StrVector(plot_conditions)
         ro.globalenv['ctrl_condition'] = ctrl_condition
         ro.globalenv['savedir'] = savedir
-        ro.globalenv['plot_errorbar'] = plot_errorbar
-        ro.globalenv['align_yaxis'] = align_yaxis
-        ro.globalenv['match_time_norm'] = match_time_norm
+        ro.globalenv['plot_errorbar'] = self.configs["plot_r_timecourse_settings"].get("plot_errorbar")
+        ro.globalenv['align_yaxis'] = self.configs["plot_r_timecourse_settings"].get("align_yaxis")
+        ro.globalenv['ifFDR'] = self.configs["plot_r_volcano_settings"].get("adj_pval")
+        ro.globalenv['match_time_norm'] = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
         ro.globalenv['selected_normalizer'] = self.configs.get("selected_normalizer")
         
         for df_to_use in dfs_to_use:
@@ -1539,10 +1537,10 @@ class BasePlotter:
                     if ctrl_condition == "None":
                         ro.r(
                             '''r_time_course_intensity(df, genelist, genelist_name, plot_conditions, logscale, plot_errorbar, 
-                            plot_title, savedir, align_yaxis, df_to_use, selected_normalizer)''')
+                            plot_title, savedir, align_yaxis, ifFDR, df_to_use, selected_normalizer)''')
                     else:
                         ro.r('''r_time_course_FC(df, genelist, genelist_name, plot_conditions, ctrl_condition, logscale, plot_errorbar,
-                                                 plot_title, savedir, match_time_norm, align_yaxis, df_to_use, selected_normalizer)''')
+                                                 plot_title, savedir, match_time_norm, align_yaxis, ifFDR, df_to_use, selected_normalizer)''')
             if self.interesting_proteins != {}:
                 for pathways in self.interesting_proteins:
                     plot_title, genelist = self.get_r_timecourse_data(df_to_use=df_to_use,
@@ -1557,10 +1555,10 @@ class BasePlotter:
                     if ctrl_condition == "None":
                         ro.r(
                             '''r_time_course_intensity(df, genelist, genelist_name, plot_conditions, logscale, plot_errorbar, 
-                            plot_title, savedir, align_yaxis, df_to_use, selected_normalizer)''')
+                            plot_title, savedir, align_yaxis, ifFDR, df_to_use, selected_normalizer)''')
                     else:
                         ro.r('''r_time_course_FC(df, genelist, genelist_name, plot_conditions, ctrl_condition, logscale, plot_errorbar,
-                                                 plot_title, savedir, match_time_norm, align_yaxis, df_to_use, selected_normalizer)''')
+                                                 plot_title, savedir, match_time_norm, align_yaxis, ifFDR, df_to_use, selected_normalizer)''')
     
     def get_pca_data(self, df_to_use: str, level: int, n_components: int = 2, fill_value: float = 0,
                      no_missing_values: bool = True, fill_na_before_norm: bool = False, **kwargs):
