@@ -9,6 +9,7 @@ r_time_course_FC = function(df,
                           savedir,
                           match_time_norm,
                           align_yaxis,
+                          ifFDR = FALSE,
                           df_to_use,
                           selected_normalizer)
 {# R script for plotting time-course FC data. Modified from Elisa Holstein's script (S18_E27_TimeCourse on 2/21/2023)
@@ -24,6 +25,7 @@ r_time_course_FC = function(df,
   # savedir: the directory where the plots will be saved
   # match_time_norm: (TRUE or FALSE) whether the normalization will be done by each time point of the ctrl_condition
   # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
+  # ifFDR: should p-values should be adjusted (Benjamini-Hochberg), to be passed to plot_significance()
   #For naming the output file:
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
   # selected_normalizer: which normalizer was used
@@ -35,16 +37,16 @@ r_time_course_FC = function(df,
   library(egg)
   library(dplyr)
   library(data.table)
-  library(ggsci)
+  #library(ggsci)
   library(ggplot2)
   library(tidyverse)
   library(stringr)
-  library(MBQN)
-  library(preprocessCore)
+  #library(MBQN)
+  #library(preprocessCore)
   library(gridExtra)
   library(matrixStats)
   library(limma)
-  library(EnhancedVolcano)
+  #library(EnhancedVolcano)
   print("Plotting in progress :D The R script used to make this plot was adapted from Elisa Holstein's work")
   
   # 1: remove all irrelevant genes and conditions ---------
@@ -142,15 +144,15 @@ r_time_course_FC = function(df,
   if (plot_errorbar)
     plot_FC = plot_FC +
     facet_wrap( ~ gene, ncol=4, scales = "free") +
-    stat_summary(fun = "mean", geom="line",  size=1) +
+    stat_summary(fun = "mean", geom="line",  linewidth=1) +
     stat_summary(fun = "mean", geom="point",  size=2)+
-    stat_summary(fun.data = "mean_se", geom = "errorbar", size=0.5, 
+    stat_summary(fun.data = "mean_se", geom = "errorbar", linewidth=0.5, 
                  width = 1,
                  fun.args = list(mult=1))
   else
     plot_FC = plot_FC + geom_point(aes(fill=condition), shape=16, size=2) +
     facet_wrap( ~ gene, ncol=4, scales = "free") +
-    stat_summary(fun = "mean", geom="line",  size=1)
+    stat_summary(fun = "mean", geom="line",  linewidth=1)
   # adjust plot appearance
   plot_FC <-  plot_FC + 
     theme_article() +
@@ -192,7 +194,7 @@ r_time_course_FC = function(df,
          limitsize = FALSE,units = 'in', dpi = 300)
   
   # 5 pass the dataframe to plot_significance for statistical testing
-  plot_significance(df_all_norm, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer)
+  plot_significance(df_all_norm, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer, ifFDR)
   print("Plotting done! Check the prompt for any warning")
 }
 
@@ -205,6 +207,7 @@ r_time_course_intensity = function(df,
                             plot_title,
                             savedir,
                             align_yaxis,
+                            ifFDR = FALSE,
                             df_to_use,
                             selected_normalizer)
 {# R script for plotting time-course protein intensities (no fold change). Modified from Elisa Holstein's script (S18_E27_TimeCourse on 2/21/2023)
@@ -218,6 +221,7 @@ r_time_course_intensity = function(df,
   # plot_title: name of the plot pdf file
   # plotdir: the directory where the plots will be saved
   # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
+  # ifFDR: should p-values be adjusted for multiple comparisons (Benjamini-Hochberg), to be passed to plot_significance()
   #For naming the output file:
   # genelist_name: name of the genelist
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
@@ -226,20 +230,20 @@ r_time_course_intensity = function(df,
   
   # 0: Set up
   library(gtools)
-  library(ggrepel)
+  #library(ggrepel)
   library(egg)
   library(dplyr)
   library(data.table)
-  library(ggsci)
+  #library(ggsci)
   library(ggplot2)
   library(tidyverse)
   library(stringr)
-  library(MBQN)
-  library(preprocessCore)
+  #library(MBQN)
+  #library(preprocessCore)
   library(gridExtra)
   library(matrixStats)
   library(limma)
-  library(EnhancedVolcano)
+  #library(EnhancedVolcano)
   print("Plotting in progress :D The R script used to make this plot was adapted from Elisa Holstein's work")
   
   # 1: remove all irrelevant genes and conditions ---------
@@ -308,15 +312,15 @@ r_time_course_intensity = function(df,
   if (plot_errorbar)
     plot_intensity = plot_intensity +
     facet_wrap( ~ gene, ncol=4, scales = "free") +
-    stat_summary(fun = "mean", geom="line",  size=1) +
+    stat_summary(fun = "mean", geom="line",  linewidth=1) +
     stat_summary(fun = "mean", geom="point",  size=2)+
-    stat_summary(fun.data = "mean_se", geom = "errorbar", size=0.5, 
+    stat_summary(fun.data = "mean_se", geom = "errorbar", linewidth=0.5, 
                  width = 1,
                  fun.args = list(mult=1))
   else
     plot_intensity = plot_intensity + geom_point(aes(fill=condition), shape=16, size=2) +
     facet_wrap( ~ gene, ncol=4, scales = "free") +
-    stat_summary(fun = "mean", geom="line",  size=1)
+    stat_summary(fun = "mean", geom="line",  linewidth=1)
   # adjust plot appearance
   plot_intensity <-  plot_intensity + 
     theme_article() +
@@ -359,12 +363,12 @@ r_time_course_intensity = function(df,
          limitsize = FALSE,units = 'in', dpi = 300)
   
   # 5 pass the dataframe to plot_significance for statistical testing
-  plot_significance(df_all, savedir, genelist_name, match_time_norm = FALSE, df_to_use, selected_normalizer)  # match_time_norm set to FALSE since no normalization was done
+  plot_significance(df_all, savedir, genelist_name, match_time_norm = FALSE, df_to_use, selected_normalizer, ifFDR)  # match_time_norm set to FALSE since no normalization was done
   print("Plotting done! Check the prompt for any warning")
 }
 
 
-plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer)
+plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer, ifFDR = FALSE)
 {# perform statistical testing of selected conditions and genes. Return heatmaps and a csv file showing the p-value
   # of the testing for all genes
   # For each gene: use a two-way ANOVA with time and condition (aka treatment/cell line/...) as factors,
@@ -376,6 +380,7 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   # df: processed dataframes of fold change/intensities. Passed from r_timecourse_FC or r_timecourse_intensity
   # savedir: need to add either "/plots" or "/csv_significance" to become directory for saving results
   # match_time_norm: whether data was normalized per time point
+  # ifFDR: should the p-values be corrected for multiple testings (Benjamini-Hochberg)
   # For naming the output file:
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
   # selected_normalizer: which normalizer was used
@@ -442,6 +447,9 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   all_sign_df$sample2 = gsub("@", "-", all_sign_df$sample2)
   all_sign_df$label_sample1 = sapply(all_sign_df$sample1, function(x) condition_code[x])
   all_sign_df$label_sample2 = sapply(all_sign_df$sample2, function(x) condition_code[x])
+  # If ifFDR is TRUE: correct the p-values for multiple hypothesis testings
+  if (ifFDR)
+    all_sign_df$p_value = p.adjust(all_sign_df$p_value, method = "BH")
   all_sign_df$sign_level <- cut(all_sign_df$p_value, breaks=c(-1,0.00001, 0.0001, 0.001, 0.01, 0.05, 1), 
                          label=c("*****","****" ,"***", "**", "*", ""))  # Create column of significance labels
   
@@ -455,6 +463,8 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   if (selected_normalizer != "None")
     file_title = paste(file_title, selected_normalizer)
   file_title = paste(file_title, df_to_use, sep="")
+  if (ifFDR)
+    file_title = paste0(file_title, "_adjusted_pval")
   # save all_sign_df as a csv file
   csvdir = paste(savedir, "/csv_significance/", file_title,".csv", sep= "")
   # handle exception when directory is too long
@@ -532,7 +542,7 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
           strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
     scale_x_discrete(breaks = sample_labels[-length(sample_labels)], expand = c( 0, 0))+
     scale_y_discrete(breaks = sample_labels[-1], expand = c(0,0))+
-    scale_fill_gradient(high = "#A0C47D", low = "red", na.value = "white", trans = "log",
+    scale_fill_gradient(high = "#FFFFE0", low = "red", na.value = "white", trans = "log",
                         breaks = c(0.00001, 0.0001, 0.001, 0.01, 0.05),
                         guide = guide_colorbar(ticks.colour = "black"))
   
