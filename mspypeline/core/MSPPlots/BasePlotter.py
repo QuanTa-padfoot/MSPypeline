@@ -164,6 +164,8 @@ class BasePlotter:
                 self.add_normalized_option(option_name, self.selected_normalizer, "normalized")
 
         # set all result dirs
+        # path for saving normalized data
+        self.file_dir_data = os.path.join(self.start_dir, "normalized_data")
         # path for venn diagrams
         self.file_dir_venn = os.path.join(self.start_dir, "venn")
         # path for descriptive plots
@@ -270,6 +272,7 @@ class BasePlotter:
                 getattr(self, plot_name)(**plot_settings)
         try: plt.switch_backend('pdf')
         except: pass
+        self.export_data()
         self.logger.info("Done creating plots")
 
     def add_intensity_column(self, option_name: str, name_in_file: str, name_in_plot: str,
@@ -383,6 +386,17 @@ class BasePlotter:
 
     def create_report(self):
         raise NotImplementedError
+
+    def export_data(self):
+        """Export (normalized) data. Data without the log2 transformation or those containing the string "normalized" 
+        are not considered (it is better to specify the type of normalization done, e.g., median_norm)."""
+        if not self.configs.get("export_data", False):
+            return
+        if not os.path.isdir(self.file_dir_data):
+            os.makedirs(self.file_dir_data)
+        for df_to_use in self.all_intensities_dict:
+            if "log2" in df_to_use and "normalized" not in df_to_use:
+                self.all_intensities_dict[df_to_use].to_csv(os.path.join(self.file_dir_data,f"{df_to_use}_intensities.csv"), sep=";", decimal=",", na_rep="NA", encoding="utf-8")
 
     def get_venn_group_data(self, df_to_use: str, level: int, non_na_function=get_number_of_non_na_values):
         """
