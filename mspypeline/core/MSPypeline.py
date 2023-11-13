@@ -281,6 +281,11 @@ class MSPGUI(tk.Tk):
 
         self.plot_intermediate_row("Choose a Normalization Method", tab = tab1)
 
+        self.if_export_data = tk.IntVar(value=1)
+        
+        export_norm_data = ttk.Checkbutton(tab1, text="Export data",variable= self.if_export_data)
+        export_norm_data.grid(row=self.heading_length + self.number_of_plots + 2, column=0, pady=20)
+        create_tool_tip(export_norm_data, "Export log2-transformed data. Select a normalizing option above to also export normalized data")
 
         ##Section Outlier detection
         self.plots_per_section = 0
