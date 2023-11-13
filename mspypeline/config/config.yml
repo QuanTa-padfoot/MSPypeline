@@ -3,6 +3,7 @@
 
 selected_reader: mqreader  # which file reader should be used
 selected_normalizer: None  # which normalizer should be used
+export_data: false  # should processed data be exported (can be "true" or "false")
 
 has_techrep: false  # does the file have technical replicates (can be "true" or "false")
 
