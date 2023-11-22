@@ -496,6 +496,7 @@ class MSPGUI(tk.Tk):
         self.replicate_var.set(self.mspinit.configs.get("has_techrep", True))
         self.p_val_var.set(self.mspinit.configs.get("plot_r_volcano_settings", {}).get("adj_pval", False))
         self.normalizer_text.set(self.mspinit.configs.get("selected_normalizer", "None"))
+        self.if_export_data.set(self.mspinit.configs.get("export_data",False))
         self.update_listboxes()
 
     def reader_setter(self, *args):
@@ -532,6 +533,7 @@ class MSPGUI(tk.Tk):
         pathways = self.pathway_list.curselection()
         pathways = [self.mspinit.list_full_pathways[int(pathway)] for pathway in pathways]
         self.mspinit.configs["plot_r_volcano_settings"]["adj_pval"] = bool(self.p_val_var.get())
+        self.mspinit.configs["export_data"] = bool(self.if_export_data.get())
         if not gos:
             gos = defaultConfigs["go_terms"]
         self.mspinit.configs["go_terms"] = gos
