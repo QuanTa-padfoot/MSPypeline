@@ -1,6 +1,7 @@
 from fileinput import filename
-from msilib.schema import Error
 import os
+if os.name == 'nt':
+    from msilib.schema import Error
 import re
 import pandas as pd
 from pandas.api.types import is_numeric_dtype
