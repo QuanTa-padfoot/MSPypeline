@@ -1,3 +1,20 @@
+get_samples_by_timepoint = function(all_samples_name, 
+                                    timepoint)
+{# Helper function for r_time_course_FC() and r_time_course_intensity() to find
+  # all samples matching a defined timepoint (at second-to-last level)
+  # Parameters
+  # --------------------------------------------------------
+  # all_samples_name: all samples name
+  # timepoint: the timepoint to match samples with
+  # -------------------------------------
+  # Return: a vector of samples whose time point matches the specified timepoint
+  no_level = length(unlist(strsplit(all_samples_name[1], "_")))
+  split_names = strsplit(all_samples_name, "_")
+  names(split_names) = all_samples_name
+  selected_samples = split_names[sapply(split_names, function(sample) {sample[no_level-1] == timepoint})]
+  return(names(selected_samples))
+}
+
 r_time_course_FC = function(df, 
                           genelist,
                           genelist_name,
@@ -25,7 +42,7 @@ r_time_course_FC = function(df,
   # savedir: the directory where the plots will be saved
   # match_time_norm: (TRUE or FALSE) whether the normalization will be done by each time point of the ctrl_condition
   # align_yaxis: (TRUE or FALSE) whether the y axes will be aligned across all plots
-  # ifFDR: should p-values should be adjusted (Benjamini-Hochberg), to be passed to plot_significance()
+  # ifFDR: if p-values should be adjusted (Benjamini-Hochberg), to be passed to plot_significance()
   #For naming the output file:
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
   # selected_normalizer: which normalizer was used
@@ -33,7 +50,7 @@ r_time_course_FC = function(df,
   
   # 0: Set up
   library(gtools)
-  library(ggrepel)
+  #library(ggrepel)
   library(egg)
   library(dplyr)
   library(data.table)
@@ -51,15 +68,18 @@ r_time_course_FC = function(df,
   
   # 1: remove all irrelevant genes and conditions ---------
   df_gene <- subset(df, row.names(df) %in% genelist)  # This would also remove NA gene names
+  # if no row in dataframe, inform that the genelist is skipped
+  if (nrow(df_gene) == 0) {
+    print(paste0("Skipping ", genelist_name," since no protein in this list is detected in the data"))
+    return()
+  }
   vector <- colnames(df_gene)
   if (ctrl_condition %in% plot_conditions)
     all_conditions <- plot_conditions
   else
     all_conditions <- append(plot_conditions, ctrl_condition)
-  ctrl_condition = paste0(ctrl_condition, "_")
-  all_conditions = unlist(lapply(all_conditions, function(x) paste0(x,"_")))
   df_gene_cond <- df_gene %>%
-    dplyr::select(starts_with(all_conditions))
+    dplyr::select(starts_with(paste0(all_conditions,"_")))
   # get the timepoint vector (the second to last position in column names)
   time_vector <- c()
   for (sample in colnames(df_gene_cond))
@@ -96,20 +116,19 @@ r_time_course_FC = function(df,
   # compute the fold change for each time point and add the result to df_all_norm
   starting_timepoint = time_vector[1]
   df_t = df_gene_cond %>%
-    dplyr::select(contains(paste0("_", starting_timepoint, "_"))) %>%
-    dplyr::select(starts_with(ctrl_condition))
+    dplyr::select(get_samples_by_timepoint(colnames(df_gene_cond), starting_timepoint)) %>%
+    dplyr::select(starts_with(paste0(ctrl_condition,"_")))
   ctrl_col = rowMeans(df_t, na.rm = TRUE)
   for (t in time_vector)
   {
-  timepoint = paste("_",t, "_", sep="")
   df_t = df_gene_cond %>%
-    dplyr::select(contains(timepoint))
+    dplyr::select(get_samples_by_timepoint(colnames(df_gene_cond), t))
   if (match_time_norm)
-    ctrl_col = rowMeans(df_t %>% dplyr::select(starts_with(ctrl_condition)), na.rm = TRUE)
+    ctrl_col = rowMeans(df_t %>% dplyr::select(starts_with(paste0(ctrl_condition,"_"))))
   df_norm <- df_t - ctrl_col # Normalization: subtract columns from the mean of the ctrl one
   for (condition in all_conditions)
   {df_per_condition = df_norm %>%
-    dplyr::select(starts_with(condition))
+    dplyr::select(starts_with(paste0(condition, "_")))
   # give warning if the condition was not measured at the timepoint
   if (ncol(df_per_condition) == 0)
   {print(paste("Warning: cannot find data for ", condition, " at timepoint ", t, sep=""))
@@ -138,7 +157,7 @@ r_time_course_FC = function(df,
     df_all_norm$time <- gsub(time_unit, "", df_all_norm$time) # remove all non-digits inthe column time
   df_all_norm$time <- as.numeric(df_all_norm$time)
   df_all_norm = na.omit(df_all_norm) # remove all NAs
-  
+  df_all_norm$condition = gsub("_", " ", df_all_norm$condition)
   # 3 plot with ggplot2 -------------------------------
   plot_FC <- ggplot(df_all_norm, aes(x=time, y=logFC, color=condition)) 
   if (plot_errorbar)
@@ -169,7 +188,7 @@ r_time_course_FC = function(df,
           legend.position = "top",
           # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
           strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
-      scale_x_continuous(limits = c(min(unique(df_all_norm$time)), max(unique(df_all_norm$time))))
+    scale_x_continuous(limits = c(min(unique(df_all_norm$time)), max(unique(df_all_norm$time))))
   # align the y axis if align_yaxis = TRUE
   if (align_yaxis)
     plot_FC = plot_FC + 
@@ -248,9 +267,13 @@ r_time_course_intensity = function(df,
   
   # 1: remove all irrelevant genes and conditions ---------
   df_gene <- subset(df, row.names(df) %in% genelist)  # This would also remove NA gene names
-  plot_conditions = unlist(lapply(plot_conditions, function(x) paste0(x,"_")))
+  # if no row in dataframe, inform that the genelist is skipped
+  if (nrow(df_gene) == 0) {
+    print(paste0("Skipping ", genelist_name," since no protein in this list is detected in the data"))
+    return()
+  }
   df_gene_cond <- df_gene %>%
-    dplyr::select(starts_with(plot_conditions))
+    dplyr::select(starts_with(paste0(plot_conditions,"_")))
   # get the timepoint vector (the second to last position in column names)
   time_vector <- c()
   for (sample in colnames(df_gene_cond))
@@ -283,12 +306,11 @@ r_time_course_intensity = function(df,
   # compute the fold change for each time point and add the result to df_all_norm
   for (t in time_vector)
   {
-    timepoint = paste("_",t, "_", sep="")
     df_t = df_gene_cond %>%
-      dplyr::select(contains(timepoint))
+      dplyr::select(get_samples_by_timepoint(colnames(df_gene_cond), t))
     for (condition in plot_conditions)
     {df_per_condition = df_t %>%
-        dplyr::select(starts_with(condition))
+        dplyr::select(starts_with(paste0(condition,"_")))
     # give warning if the condition was not measured at the timepoint
      if (ncol(df_per_condition) == 0)
       print(paste("Warning: cannot find data for ", condition, " at timepoint ", t, sep=""))
@@ -306,7 +328,7 @@ r_time_course_intensity = function(df,
     df_all$time <- gsub(time_unit, "", df_all$time) # remove all non-digits inthe column time
   df_all$time <- as.numeric(df_all$time)
   df_all = na.omit(df_all) # remove all NAs
-  
+  df_all$condition = gsub("_", " ", df_all$condition)
   # 3 plot with ggplot2 -------------------------------
   plot_intensity <- ggplot(df_all, aes(x=time, y=intensity, color=condition)) 
   if (plot_errorbar)
@@ -337,7 +359,7 @@ r_time_course_intensity = function(df,
           legend.position = "top",
           # strip.text.x = element_blank(), # if you want to leave out x headers for each plot
           strip.text.x = element_text(size = 14, face = "bold")) + # remove axis labels of facet plots
-  scale_x_continuous(limits = c(min(unique(df_all$time)), max(unique(df_all$time))))
+    scale_x_continuous(limits = c(min(unique(df_all$time)), max(unique(df_all$time))))
   # align the y axis if align_yaxis = TRUE
   if (align_yaxis)
     plot_intensity = plot_intensity + 
@@ -370,7 +392,7 @@ r_time_course_intensity = function(df,
 
 plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_use, selected_normalizer, ifFDR = FALSE)
 {# perform statistical testing of selected conditions and genes. Return heatmaps and a csv file showing the p-value
-  # of the testing for all genes
+  # of the testing for all genes. This function is called from r_time_course_FC() or r_time_course_intensity()
   # For each gene: use a two-way ANOVA with time and condition (aka treatment/cell line/...) as factors,
   # to see if there is a significant difference among conditions. Then use Tukey Honestly-Significant-Difference
   # (TukeyHSD) for pair-wise comparisons. p-values from the TukeyHSD tests of condition are plotted and exported
@@ -380,10 +402,10 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
   # df: processed dataframes of fold change/intensities. Passed from r_timecourse_FC or r_timecourse_intensity
   # savedir: need to add either "/plots" or "/csv_significance" to become directory for saving results
   # match_time_norm: whether data was normalized per time point
-  # ifFDR: should the p-values be corrected for multiple testings (Benjamini-Hochberg)
   # For naming the output file:
   # df_to_use: type of intensities plotted (i.e. raw, iBAQ, or LFQ), this is only for labeling the plots
   # selected_normalizer: which normalizer was used
+  # ifFDR: should the p-values be corrected for multiple testings (Benjamini-Hochberg)
   # ----------------------------------------------------
   
   # 0 ------------------------------------------------------
@@ -526,11 +548,11 @@ plot_significance = function(df, savedir, genelist_name, match_time_norm, df_to_
     theme_article() +
     labs(title=paste("p-values from pair-wise comparisons of selected conditions,", df_to_use,"intensities"),
          subtitle = paste("Gene list:", genelist_name),
-         y = "",
+         y = "Sample labels (explanation at the top of the plot)",
          x = "Sample labels (explanation at the top of the plot)") +
     theme(plot.title = element_text(hjust = 0.5, color="black", size=18, face="bold"), 
           axis.title.x = element_text(size=15, face= "bold"),
-          axis.title.y = element_text(size=20, face= "bold"),
+          axis.title.y = element_text(size=15, face= "bold"),
           axis.text.y = element_markdown(size=15, face = 'bold'),
           axis.text.x = element_markdown(size=15, face = 'bold'),
           axis.line = element_line(colour="black"),
