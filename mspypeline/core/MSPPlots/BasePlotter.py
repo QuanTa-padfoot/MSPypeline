@@ -1498,6 +1498,7 @@ class BasePlotter:
         # import the r_timecourse_plot.R script
         ro.r(f'''source("{r_script_path}")''')
         # get plot settings from configs
+        match_time_norm = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
         savedir = self.file_dir_timecourse.replace('\\', '/')
         ctrl_condition = self.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
         print(f"Ctrl condition {ctrl_condition}")
