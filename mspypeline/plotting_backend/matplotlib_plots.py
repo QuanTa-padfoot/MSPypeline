@@ -533,7 +533,7 @@ def save_pca_results(
     if n_components == 2:
         fig, axarr = plt.subplots(nrows=3, ncols=1, figsize=(14, 42))
         if pca_data.columns.names == ["level_0", "sample_name"]:
-            axarr.scatter(
+            axarr[0].scatter(
                 pca_data.loc["PC_1"] / singular_values[0],
                 pca_data.loc["PC_2"] / singular_values[1],
                 s=marker_size, edgecolors="none",
