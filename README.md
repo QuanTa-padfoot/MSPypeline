@@ -70,7 +70,7 @@ If you have a different version of R, simply replace `4.3.0` with your version.
 Now you can start the GUI:
 ```
 conda activate mspypeline_dev
-python -m mspypeline –-gui
+python -m mspypeline --gui
 ```
 
 # Data analysis of Spectronaut files
