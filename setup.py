@@ -29,7 +29,7 @@ setup(
         "matplotlib>=3.7.0",
         "matplotlib-venn>=0.11.9",
         "adjusttext>=0.7.3",
-        "scikit-learn>=1.2.2",
+        "scikit-learn==1.1.2",
     ],
     project_urls={
         "Documentation": "https://mspypeline.readthedocs.io/en/stable/",
