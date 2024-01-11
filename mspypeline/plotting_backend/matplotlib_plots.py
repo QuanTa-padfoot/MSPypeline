@@ -529,7 +529,7 @@ def save_pca_results(
         pca_var = [f"{var} %" for var in pca_var]
     else:
         pca_var = ["nan" for _ in range(len(pca_fit.n_components_))]
-
+    legend_shape = None
     if n_components == 2:
         fig, axarr = plt.subplots(nrows=3, ncols=1, figsize=(14, 42))
         if pca_data.columns.names == ["level_0", "sample_name"]:
@@ -628,8 +628,8 @@ def save_pca_results(
                         legend_shape =  get_legend_elements(labels=pca_data.columns.get_level_values(0).unique(),
                                                 marker_size=legend_marker_size, shape_map=base_shape_map)
                         shape_level = pca_data.columns.names[0].replace("_", " ")
-                    ax.set_xlabel(f"PC {row_pc} - {pca_var[0]}", fontsize=22, labelpad=20)
-                    ax.set_ylabel(f"PC {col_pc} - {pca_var[1]}", fontsize=22, labelpad=20)
+                    ax.set_xlabel(f"PC {row_pc} - {pca_var[row]}", fontsize=22, labelpad=20)
+                    ax.set_ylabel(f"PC {col_pc} - {pca_var[col]}", fontsize=22, labelpad=20)
                     ax.tick_params(axis="both", labelsize=18)
 
     if show_suptitle:
