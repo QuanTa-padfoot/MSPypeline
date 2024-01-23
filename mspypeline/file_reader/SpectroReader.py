@@ -220,30 +220,11 @@ class SpectroReader(BaseReader):
         df = df.drop(labels=dupl_row, axis=0)
         df["PG.Genes"] = df["PG.Genes"].fillna(df["PG.ProteinGroups"])
         df.index = range(len(df.index))
-        # identify thousand separator
-        last_row = df.loc[len(df.index) - 1, :][3:]
-        thousand_sep = ','
-        for items in [items for items in last_row if isinstance(items, str)]:
-            first_comma, last_comma = items.find(","), items.rfind(",")
-            first_dot, last_dot = items.find("."), items.rfind(".")
-            if first_comma != last_comma:
-                break
-            elif first_dot != last_dot:
-                thousand_sep = "."
-                break
+        
         # convert non-numeric intensities to numeric:
-
-        def convert_string(x):
-            try:
-                return float(x.replace(',', '.'))
-            except ValueError:
-                a = x.replace(thousand_sep, '')
-                return float(a.replace(',', '.'))
-            except AttributeError:
-                return x
-        for col in [col for col in df.columns if '.Quantity' in col or '.IBAQ' in col or '.iBAQ' in col or '.LFQ' in col]:
-            if not is_numeric_dtype(df[col]):
-                df[col] = df[col].apply(lambda x: convert_string(x))
+        value_col = [col for col in df.columns if '.Quantity' in col or '.IBAQ' in col or '.iBAQ' in col]
+        df[value_col] = df[value_col].replace(',','.', regex=True)
+        df[value_col] = df[value_col].apply(pd.to_numeric, errors = "coerce")
         
         # rename columns according to sample_mapping.txt
         try:

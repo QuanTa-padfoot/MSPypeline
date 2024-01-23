@@ -330,6 +330,9 @@ class MSPGUI(tk.Tk):
         self.plots_per_section = 0
         self.plot_row("Pathway Analysis", "pathway_analysis",
                       "What is the intensity of my proteins of interest, and is it significantly different in one group versus the other?", tab = tab3)
+        self.plots_per_section +=1
+        self.plot_row("Heatmap Pathway", "heatmap_pathway",
+                      "What is the intensity of my proteins of interest?", tab = tab3)
         #self.plot_row("Pathway Timecourse", "pathway_timecourse")
         self.plot_row("Go analysis", "go_analysis",
                       "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
