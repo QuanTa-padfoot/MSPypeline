@@ -88,6 +88,11 @@ plot_pathway_analysis_settings:
   dfs_to_use: []
   levels: []
 
+plot_heatmap_pathway_settings:
+  create_plot: false
+  dfs_to_use: []
+  levels: []
+
 plot_go_analysis_settings:
   create_plot: false
   dfs_to_use: []
