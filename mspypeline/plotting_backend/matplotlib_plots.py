@@ -21,6 +21,7 @@ from scipy import stats
 from sklearn.decomposition import PCA
 import functools
 import warnings
+import seaborn as sns
 
 from mspypeline.helpers import get_number_rows_cols_for_fig, plot_annotate_line, get_legend_elements, \
     get_plot_name_suffix, venn_names, format_docstrings
@@ -736,6 +737,81 @@ def save_pathway_analysis_results(
         save_plot_func(fig, path, plot_name, save_pathway_analysis_results, **kwargs)
     return fig, axarr
 
+@format_docstrings(kwargs=_get_path_and_name_kwargs_doc)
+@save_csvs({"mean_intensities": "csv_intensity/{pathway}_mean_intensities",
+            "z_transform_mean": "csv_intensity/{pathway}_mean_z_transformed_intensity"})
+def save_heatmap_pathway_results(
+        mean_intensities: pd.DataFrame, z_transform_mean: pd.DataFrame = None, pathway: str = "",
+        show_suptitle: bool = True, threshold: float = 0.05, intensity_label: str = "Intensity",
+        color_map: Optional[dict] = None, close_plots: str = "all", exp_has_techrep: bool = False, **kwargs
+) -> Tuple[plt.Figure, plt.Axes]:
+    """
+    Saves plots into the pathway_analysis dir.
+    
+    Parameters
+    ----------
+    mean_intensities
+        data frame of mean intensities
+    z_transform_mean
+        data frame of mean z-score
+    pathway
+        name of the pathway
+    show_suptitle
+        should the pathway name be shown as figure title
+    intensity_label
+        from which intensity was the data. will be shown on title of the mean intensities plot
+    color_map
+        a mapping from the column names to a color (NOT in use)
+    close_plots
+        which plots should be closed when creating the plot, if None no plots will be closed
+    exp_has_techrep
+        whether technical replicates were aggregated for the plot (NOT in use)
+    kwargs
+        {kwargs}
+
+    Returns
+    -------
+
+    """
+    if close_plots is not None:
+        plt.close(close_plots)
+    level_keys = list(mean_intensities.columns.get_level_values(0).unique())
+    level_keys_labels = [key.replace("_", " ") for key in level_keys]
+    if len(level_keys_labels) == 0:
+        level_keys_labels = level_keys
+    with sns.axes_style("ticks"):
+        mean_intensities["dataType"] = f"Mean {intensity_label}"
+        z_transform_mean["dataType"] = "Mean z-score"
+        plot_data = pd.concat([mean_intensities, z_transform_mean])
+        plot_data = plot_data.fillna(float('nan'))
+        def heat(data, color):
+            if data.iloc[0,data.columns.get_loc('dataType')] == "Mean z-score":
+                res = sns.heatmap(data.drop('dataType', axis=1),cmap='coolwarm',cbar_kws={"location": "top"}, center=0,
+                            xticklabels=1, yticklabels=1, square=True, mask=data.drop('dataType', axis=1).isnull())
+            else:
+                res = sns.heatmap(data.drop('dataType', axis=1),cmap='rocket_r',cbar_kws={"location": "top"}, 
+                                    xticklabels=1, yticklabels=1, square=True, mask=data.drop('dataType', axis=1).isnull())
+            # Drawing the frame 
+            for _, spine in res.spines.items(): 
+                spine.set_visible(True) 
+                spine.set_linewidth(1) 
+            return res
+        fig = sns.FacetGrid(data=plot_data, col='dataType')
+        fig = fig.map_dataframe(heat)
+        if show_suptitle:
+            fig.fig.subplots_adjust(top=0.95)
+            fig.fig.suptitle(f"{pathway}")
+        fig.set_axis_labels("", "")
+        titles = [f'Mean {intensity_label}','Mean z-score']
+        for ax, title in zip(fig.axes.flatten(),titles):
+            ax.set_title(title)
+            ax.set_xticklabels(level_keys_labels)
+        fig.fig.set_figwidth(mean_intensities.shape[1]*0.7)
+        fig.fig.set_figheight(0.9+mean_intensities.shape[0]*0.7)
+        fig.fig.tight_layout()
+        path, plot_name = get_path_and_name_from_kwargs(name="plots/{pathway}_heatmap", pathway=pathway, **kwargs)
+        save_plot_func(fig, path, plot_name, save_pathway_analysis_results, **kwargs)
+    return fig
 
 @save_plot("boxplot")
 @format_docstrings(kwargs=_get_path_and_name_kwargs_doc)
