@@ -30,6 +30,7 @@ setup(
         "matplotlib-venn>=0.11.9",
         "adjusttext>=0.7.3",
         "scikit-learn==1.1.2",
+        "seaborn>=0.12.0",
     ],
     project_urls={
         "Documentation": "https://mspypeline.readthedocs.io/en/stable/",
