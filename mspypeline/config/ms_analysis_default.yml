@@ -88,8 +88,6 @@ plot_heatmap_pathway_settings:
   create_plot: false
   dfs_to_use: []
   levels: []
-  show_suptitle: true           # should a figure title be shown
-  intensity_label: "Intensity"  # name of the intensities for the x label
 
 plot_go_analysis_settings:
   create_plot: false
