@@ -29,8 +29,7 @@ setup(
         "matplotlib>=3.7.0",
         "matplotlib-venn>=0.11.9",
         "adjusttext>=0.7.3",
-        "scikit-learn==1.1.2",
-        "seaborn>=0.12.0",
+        "scikit-learn==1.1.2",   # seaborn==0.12.0 installation moved to setup.ps1 to avoid timed out error
     ],
     project_urls={
         "Documentation": "https://mspypeline.readthedocs.io/en/stable/",
