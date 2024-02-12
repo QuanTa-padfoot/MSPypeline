@@ -353,6 +353,11 @@ class MSPGUI(tk.Tk):
         total_length = self.heading_length + self.number_of_plots
         total_length = self.heading_length + self.number_of_plots
 
+        self.plots_per_section +=1
+        self.plot_row("Peptide report", "peptide_report",
+                      "Detailed report of each protein in selected pathway(s) based on peptide data\n Requires a .csv file containing data on the peptide level in a folder named `peptide`\n Internet is needed to download protein information from Uniprot.",
+                      tab=tab3)
+
         
         # add all tracing to the variables
         self.dir_text.trace("w", self.dir_setter)
