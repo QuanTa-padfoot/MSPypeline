@@ -118,5 +118,5 @@ plot_r_timecourse_settings:
 
 plot_peptide_report_settings:
   create_plot: false
-  dfs_to_us: []
+  dfs_to_use: []
   levels: []
