@@ -111,3 +111,8 @@ plot_r_timecourse_settings:
   sample_to_normalize: []
   samples_to_plot: []
   matching_time_normalization: false
+
+plot_peptide_report_settings:
+  create_plot: false
+  dfs_to_us: []
+  levels: []
