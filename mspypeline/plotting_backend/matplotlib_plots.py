@@ -2046,3 +2046,48 @@ def save_venn(
     fig.legend(handles, labels, bbox_to_anchor=(1.02, 0.5), loc="center left")
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     return fig, ax
+
+def save_peptide_reports(
+        peptide_coverage: pd.DataFrame, gene: str, uniprotID, save_path: str, file_name: str, level: int, close_plots: str = "all", 
+        exp_has_techrep: bool = False, **kwargs
+):
+    with PdfPages(os.path.join(save_path, file_name)) as pdf:
+        fig = plt.figure(figsize=(14, 7))
+        fig.text(0.5, 0.92, f"{gene} peptide report", size=25,transform=fig.transFigure,ha="center")
+        fig.text(0.5, 0.85, f"Uniprot ID: {uniprotID}", size=20,transform=fig.transFigure,ha="center")
+        pdf.savefig()
+        plt.close(fig)
+        #######################################################
+        # plot peptide coverage
+        #######################################################
+        if not peptide_coverage.empty:
+            plt.figure(figsize=(0.07*peptide_coverage.shape[1],0.7*peptide_coverage.shape[0]))
+            hm_tick_pos = list(range(0,peptide_coverage.shape[1]+1,25))
+            hm_tick_pos[0] = 1
+            hm_tick_label = [None] * peptide_coverage.shape[1]
+            for tick_pos in hm_tick_pos:
+                hm_tick_label[tick_pos-1] = tick_pos
+            ncols = peptide_coverage.values.max()+1
+            hm = sns.heatmap(peptide_coverage, 
+                yticklabels = [item.replace("_", " ") for item in peptide_coverage.index],
+                cmap = sns.color_palette("rocket_r", n_colors=ncols),
+                cbar_kws = dict(orientation = 'horizontal', shrink = 0.5, pad = 0.1)
+                )
+            hm.set_xticks([i-1 for i in hm_tick_pos])
+            hm.set_xticklabels(hm_tick_pos)
+            plt.yticks(rotation=0)
+            plt.xticks(rotation=45)
+            plt.title("Peptide coverage", fontsize=24, fontweight="bold")
+            hm.tick_params(labelsize=20)
+            colorbar = hm.collections[0].colorbar
+            colorbar.ax.tick_params(labelsize=20)
+            # The list comprehension calculates the positions to place the labels to be evenly distributed across the colorbar
+            r = colorbar.vmax - colorbar.vmin
+            colorbar.set_ticks([colorbar.vmin + 0.5 * r / (ncols) + r * i / (ncols) for i in range(ncols)])
+            colorbar.set_ticklabels(range(0, ncols))
+            #hm.collections[0].colorbar.set_ticks(np.linspace(start=0, stop=ncols-1, num=ncols))
+            colorbar.ax.set_title("Number of detections", fontsize=20)
+            fig = hm.get_figure()
+            fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+            pdf.savefig(figure=fig)
+            plt.close(fig)

@@ -115,6 +115,7 @@ class SpectroReader(BaseReader):
                     use_cols = ["iBAQ " + col for col in use_cols]
                 elif intensity == '.LFQ':
                     use_cols = ["LFQ intensity " + col for col in use_cols]
+                use_cols = [col.split('.PG')[0] for col in use_cols]
                 use_cols = [col.split('.raw')[0] for col in use_cols]
                 df1.columns = use_cols
                 if self.use_imputed is False:

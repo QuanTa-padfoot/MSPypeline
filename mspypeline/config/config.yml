@@ -116,4 +116,9 @@ plot_r_timecourse_settings:
   samples_to_plot: []
   matching_time_normalization: false
 
+plot_peptide_report_settings:
+  create_plot: false
+  dfs_to_use: []
+  levels: []
+
 has_groups: false

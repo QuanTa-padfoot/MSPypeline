@@ -89,7 +89,7 @@ class BasePlotter:
         "plot_scatter_replicates", "plot_experiment_comparison", "plot_go_analysis", "plot_venn_results",
         "plot_venn_groups", "plot_r_volcano", "plot_pca_overview",
         "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers",
-        "plot_r_timecourse"
+        "plot_r_timecourse", "plot_peptide_report"
     ]
 
     def __init__(
@@ -180,6 +180,8 @@ class BasePlotter:
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
         # path for timecourse plots
         self.file_dir_timecourse = os.path.join(self.start_dir, "timecourse")
+        # path for peptide report
+        self.file_dir_peptide = os.path.join(self.start_dir, "peptide","peptide_report")
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
@@ -2147,3 +2149,136 @@ class BasePlotter:
             dfs_to_use=dfs_to_use, levels=levels, plot_function=self.plot_intensity_heatmap,
             file_name="heatmap_overview_all_normalizers", **plot_kwargs
         )
+
+    def read_peptide_data(self):
+        raise NotImplementedError
+
+    def get_peptide_report_data(self, df_to_use: str, level: int, gene: str, all_peptide_data: dict,**kwargs):
+        """
+        | Get data on the peptide level 
+
+        Parameters
+        ----------
+        df_to_use
+            which dataframes/intensities should be analysed
+        level
+            at which level of the data tree should the data be compared
+        gene
+            Name of the gene whose peptide data will be retrieved
+        all_peptide_data
+            Data of all peptides
+        kwargs
+            accepts kwargs
+        Returns
+        -------
+        
+        """
+        import requests
+        # subset the peptide data
+        all_peptide_df = all_peptide_data.get("peptide_df")
+        timepoints_dict = all_peptide_data.get("timepoints_dict")
+        time_numerical_dict = all_peptide_data.get("time_numerical_dict")
+        all_conditions = self.all_tree_dict[df_to_use].level_keys_full_name[level]
+        try:
+            protein_peptide_data = all_peptide_df.loc[all_peptide_df["PG.Genes"]==gene,:]
+            protein_peptide_data.index = range(protein_peptide_data.shape[0])
+            if protein_peptide_data.shape[0] == 0:
+                self.logger.warning(f"Skipping protein %s since its peptides were not detected", gene)
+                return {}
+        except (KeyError):
+            self.logger.warning(f"Skipping protein %s since its peptides were not detected", gene)
+            return {}
+        # prepare data to plot time-series and peptide time-series
+        if timepoints_dict != {}:
+            pass
+        else:
+            pass
+        ##########################################################
+        # prepare data to plot the sequence coverage
+        ##########################################################
+        uniprotID = protein_peptide_data.iloc[0, protein_peptide_data.columns.get_loc("PG.ProteinGroups")]
+        all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
+        peptide_detection = protein_peptide_data.copy()
+        peptide_detection.loc[:,all_sample_name] = peptide_detection.loc[:,all_sample_name].notna().astype(int)
+        try:
+            # Make request to uniprot entry fasta file
+            url=f"https://rest.uniprot.org/uniprotkb/{uniprotID}.fasta"
+            r = requests.post(url) 
+            fasta=''.join(r.text)
+            sequence = "".join(fasta.split("\n")[1:])
+            peptide_sequence_in_protein = protein_peptide_data["PEP.StrippedSequence"].unique()
+            all_peptide_pos = {}
+            for peptide_sequence in peptide_sequence_in_protein:
+                start_pos = sequence.find(peptide_sequence)
+                end_pos = start_pos + len(peptide_sequence) 
+                if start_pos == -1:
+                    continue
+                else:
+                    all_peptide_pos[peptide_sequence] = [start_pos, end_pos]
+            # initiate a dataframe for plotting
+            heatmap_dataset = pd.DataFrame(0, columns=range(len(sequence)), index=all_conditions)
+            heatmap_dataset.sort_index(axis=0, inplace=True)
+            # update heatmap
+            for condition in all_conditions:
+                filter_col = self.all_tree_dict[df_to_use][condition].aggregate(None).columns
+                
+                for sample in filter_col:
+                    detection_sample = [False for i in heatmap_dataset.columns]
+                    for peptide in all_peptide_pos.keys():
+                        if peptide_detection.loc[peptide_detection["PEP.StrippedSequence"]==peptide,sample].sum() > 0:
+                            start_pos, end_pos = all_peptide_pos[peptide]
+                            detection_sample[start_pos:end_pos] = [True] * (end_pos - start_pos)
+                    heatmap_dataset.loc[condition,:] += detection_sample
+        
+            heatmap_dataset.columns += 1  # adjust positions so it starts with 1, not 0 as in python indexing
+        except:
+            self.logger.warning("Cannot retrieve peptide sequence from Uniprot. Please check your Internet connection.")
+        return {"uniprotID": uniprotID,"peptide_coverage": heatmap_dataset}
+
+    @add_end_docstrings(plot_para_return_docstring.format(
+        ":func:`~mspypeline.plotting_backend.matplotlib_plots.save_peptide_report_results`"
+    ))
+
+    @validate_input
+    def plot_peptide_report(self, dfs_to_use: Union[str, Iterable[str]],
+                                  levels: Union[int, Iterable[int]], **kwargs):
+        """
+        | Uses :meth:`~mspypeline.BasePlotter.read_peptide_data` to read the peptide dataset from Spectronaut. The peptide data 
+          should be a csv or tsv file and stored in a folder named `peptide`, which is in the same directory as the protein data.
+          Similar to data on the protein level, there should be only one peptide dataset in the `peptide` folder to avoid confusion.
+        | Uses :meth:`~mspypeline.BasePlotter.get_peptide_report_data` to get peptide data of a protein and process it based on
+          the selected level. 
+        | 
+          :func:`~mspypeline.plotting_backend.matplotlib_plots.save_peptide_reports`.
+        | Receives peptide data from :meth:`~mspypeline.BasePlotter.get_peptide_report_data` and make plots. Each protein corresponds 
+          to one PDF output file. Currently available plots are:
+          - Heatmap showing the coverage of detected peptides. The peptide sequences are retrieved from Uniprot using the Uniprot ID specified 
+            in the `PG.ProteinGroups` column of the peptide dataset.
+
+        """
+        plots = []
+        # import and preprocess peptide data 
+        if not os.path.isdir(self.file_dir_peptide):
+            os.makedirs(self.file_dir_peptide)
+        # If no pathway was selected, return empty
+        if self.interesting_proteins == {}:
+            return plots
+        else:
+            # get a list of proteins to be plotted
+            genelist = []
+            for pathway in list(self.interesting_proteins.keys()):
+                for protein in self.interesting_proteins[pathway]:
+                    if protein not in genelist:
+                        genelist.append(protein)
+        all_peptide_data = self.read_peptide_data(dir_peptide_data_folder = os.path.join(self.start_dir,"peptide"))  # with default settings for peptide_reader()
+        for level in levels:
+            for df_to_use in dfs_to_use:
+                for gene in genelist:
+                    peptide_data = self.get_peptide_report_data(df_to_use=df_to_use, level=level, gene=gene, all_peptide_data = all_peptide_data,**kwargs)
+                    if peptide_data != {}:  # i.e. if peptide data is available for the current protein
+                        plot_kwargs = dict(level=level, gene=gene, save_path=self.file_dir_peptide, file_name=f"{gene}_peptide_report_level{level}.pdf",
+                                            exp_has_techrep=self.experiment_has_techrep)
+                        plot_kwargs.update(**kwargs)
+                        plot = matplotlib_plots.save_peptide_reports(**peptide_data, **plot_kwargs)
+                        
+        return plots
