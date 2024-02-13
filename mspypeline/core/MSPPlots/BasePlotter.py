@@ -89,7 +89,7 @@ class BasePlotter:
         "plot_scatter_replicates", "plot_experiment_comparison", "plot_go_analysis", "plot_venn_results",
         "plot_venn_groups", "plot_r_volcano", "plot_pca_overview",
         "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers",
-        "plot_r_timecourse"
+        "plot_r_timecourse", "plot_peptide_report"
     ]
 
     def __init__(
@@ -180,6 +180,8 @@ class BasePlotter:
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
         # path for timecourse plots
         self.file_dir_timecourse = os.path.join(self.start_dir, "timecourse")
+        # path for peptide report
+        self.file_dir_peptide = os.path.join(self.start_dir, "peptide","peptide_report")
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
