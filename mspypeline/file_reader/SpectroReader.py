@@ -56,13 +56,14 @@ class SpectroReader(BaseReader):
             for cur_separator in [",", "\t", ";"]:
                 try:
                     df = pd.read_csv(file_dir, sep=cur_separator)
-                    if df.columns[0] == 'PG.ProteinGroups':
+                    if ('PG.ProteinGroups' in df.columns) and ('PG.Genes' in df.columns) and ('PG.ProteinDescriptions' in df.columns):
                         df = self.preprocess_df(df)
+                        print("SpectroReader opened file, yay :D")
+                        break
+                    else:
+                        print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
                 except:
                     print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
-                if df.shape[1] > 1:
-                    print("SpectroReader opened file, yay :D")
-                    break
             df = df.filter(regex=(".Quantity"))
             formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
             self.intensity_column_names = formatted_proteins_txt_columns
@@ -89,13 +90,14 @@ class SpectroReader(BaseReader):
         for cur_separator in [",", "\t", ";"]:
             try:
                 df = pd.read_csv(file_dir, sep=cur_separator)
-                if df.columns[0] == 'PG.ProteinGroups':
+                if ('PG.ProteinGroups' in df.columns) and ('PG.Genes' in df.columns) and ('PG.ProteinDescriptions' in df.columns):
                     df = self.preprocess_df(df)
+                    print("SpectroReader opened file, yay :D")
+                    break
+                else:
+                    print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
             except:
                 print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
-            if df.shape[1] > 1:
-                print("SpectroReader opened file, yay :D")
-                break
         use_index = df[self.index_col]
         if self.format_double_indx:
             use_index = self.format_double_indx(use_index)
@@ -165,14 +167,15 @@ class SpectroReader(BaseReader):
     def format_spektrocols(self, cols):
         """
         Reformats the column naming from Spektronaut to make it compatible with the setup of msypypeline.
-        Columns are split at the dot to remove the .Quantity tag. They are then split on the underscore and
+        Columns are split at `.raw` (old Spectronaut version) or `.PG` (newer version) to remove the .Quantity tag. They are then split on the underscore and
         are reordered and put together, so they have the same number of "components". This is necessary due to 
         the way analysis_design works in mspypeline.
         """
         processed_cols = []
         analysis_design = {}
         for col in cols:
-            cur_col = col.split(" ")[1]
+            cur_col = col.split("] ")[1]
+            cur_col = cur_col.split(".PG")[0]
             cur_col = cur_col.split(".raw")[0]
             new_col = cur_col.split("_")
             print(new_col)
