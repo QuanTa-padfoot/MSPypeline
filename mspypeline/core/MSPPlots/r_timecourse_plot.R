@@ -166,7 +166,7 @@ r_time_course_FC = function(df,
     stat_summary(fun = "mean", geom="line",  linewidth=1) +
     stat_summary(fun = "mean", geom="point",  size=2)+
     stat_summary(fun.data = "mean_se", geom = "errorbar", linewidth=0.5, 
-                 width = 1,
+                 width = 0,
                  fun.args = list(mult=1))
   else
     plot_FC = plot_FC + geom_point(aes(fill=condition), shape=16, size=2) +
@@ -337,7 +337,7 @@ r_time_course_intensity = function(df,
     stat_summary(fun = "mean", geom="line",  linewidth=1) +
     stat_summary(fun = "mean", geom="point",  size=2)+
     stat_summary(fun.data = "mean_se", geom = "errorbar", linewidth=0.5, 
-                 width = 1,
+                 width = 0,
                  fun.args = list(mult=1))
   else
     plot_intensity = plot_intensity + geom_point(aes(fill=condition), shape=16, size=2) +
