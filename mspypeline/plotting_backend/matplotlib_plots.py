@@ -2061,7 +2061,7 @@ def save_peptide_reports(
         # plot peptide coverage
         #######################################################
         if not peptide_coverage.empty:
-            plt.figure(figsize=(0.07*peptide_coverage.shape[1],0.7*peptide_coverage.shape[0]))
+            plt.figure(figsize=(0.07*peptide_coverage.shape[1]+2,0.7*peptide_coverage.shape[0]+1.5))
             hm_tick_pos = list(range(0,peptide_coverage.shape[1]+1,25))
             hm_tick_pos[0] = 1
             hm_tick_label = [None] * peptide_coverage.shape[1]
