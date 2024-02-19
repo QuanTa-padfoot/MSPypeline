@@ -126,7 +126,7 @@ class SpectroPlotter(BasePlotter):
             except (ValueError):
                 pass
         # rename columns
-        all_quant_cols = peptide_df.filter(regex="Quantity").columns.to_list()
+        all_quant_cols = peptide_df.filter(regex="TotalQuantity").columns.to_list()
         all_prefixes = [s.split(".raw")[0] for s in all_quant_cols]
         all_prefixes = [s.split(".PG")[0] for s in all_prefixes]
         all_sample_name = [s.split("] ")[1] for s in all_prefixes]
