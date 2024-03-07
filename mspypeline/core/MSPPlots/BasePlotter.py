@@ -1034,7 +1034,7 @@ class BasePlotter:
         """
         | Filters out all proteins of the given pathways for all samples per group of the selected level, then
           calculates the z-score from the intensities of each protein. For each group, the na threshold is applied to 
-          keep only proteins detected in a sufficient number of samples
+          keep only proteins detected in a sufficient number of samples. The threshold is not applied if the last level was selected
 
         Parameters
         ----------
@@ -1049,9 +1049,10 @@ class BasePlotter:
         Returns
         -------
         Dict
-            Dictionary with keys *"mean_intensities"* to a DataFrame containing the mean protein intensities of detected
-            proteins from the given pathway per group and *"z_transform_mean"* to a DataFrame containing the calculated
-            mean z-score for each protein of the given pathway.
+            Dictionary with keys: *"mean_intensities"* to a DataFrame containing the mean protein intensities of detected
+            proteins from the given pathway per group, *"z_transform_mean"* to a DataFrame containing the calculated
+            mean z-score for each protein of the given pathway, and *"plot_intensity_label"* and *"plot_z_label"* to label the 
+            intensity and z-score plots, respectively.
         """
         found_proteins = set(self.interesting_proteins[pathway])
         found_proteins &= set(self.all_intensities_dict[df_to_use].index)
@@ -1066,14 +1067,26 @@ class BasePlotter:
         # perform z-transformation by scipy and compute the mean z score
         z_transform_intensities = stats.zscore(protein_intensities, axis=1, nan_policy='omit')
         z_transform_mean = z_transform_intensities.groupby(level=0, axis=1).mean()
-        # na filtering
-        for condition in mean_intensities.columns:
-            na_threshold = non_na_function(len(protein_intensities[condition].columns))
-            na_mask = protein_intensities[condition].notna().sum(axis=1) >= na_threshold
-            na_mask.replace(False,np.nan, inplace=True)
-            mean_intensities[condition] = mean_intensities[condition] * na_mask
-            z_transform_mean[condition] = z_transform_mean[condition] * na_mask
-        return {"mean_intensities": mean_intensities, "z_transform_mean": z_transform_mean}
+        # apply na filtering for levels above the last level
+        level_names = self.configs.get("level_names", [])
+        if level_names != []:
+            last_level = level_names[-1]
+        else:
+            last_level = None
+        if level != last_level:
+            plot_intensity_label = f"Mean {self.intensity_label_names[df_to_use]}"
+            plot_z_label = "Mean z-score"
+            for condition in mean_intensities.columns:
+                na_threshold = non_na_function(len(protein_intensities[condition].columns))
+                na_mask = protein_intensities[condition].notna().sum(axis=1) >= na_threshold
+                na_mask.replace(False,np.nan, inplace=True)
+                mean_intensities[condition] = mean_intensities[condition] * na_mask
+                z_transform_mean[condition] = z_transform_mean[condition] * na_mask
+        else: 
+             plot_intensity_label = f"{self.intensity_label_names[df_to_use]}"
+             plot_z_label = "Z-score"
+        return {"mean_intensities": mean_intensities, "z_transform_mean": z_transform_mean, 
+                "plot_intensity_label": plot_intensity_label, "plot_z_label": plot_z_label }
 
     @add_end_docstrings(plot_para_return_docstring.format(
         ":func:`~mspypeline.plotting_backend.matplotlib_plots.save_heatmap_pathway_results`"
@@ -1083,16 +1096,18 @@ class BasePlotter:
         """
         | In the heatmap pathway, for each selected pathway, two heatmaps are created showing the mean intensities 
         and mean z-score of the proteins in the pathway for all groups of the selected level.
-        | First, :meth:`~mspypeline.BasePlotter.get_heatmap_pathway_data` is used to filter out all proteins of the
+        | :meth:`~mspypeline.BasePlotter.get_heatmap_pathway_data` is used to filter out all proteins of the
           desired pathway for all samples per group of the selected level. The function then determines which proteins are reliably detected
           in each group by removing those who are not expressed in a sufficient number of samples per group. For every
           selected pathway, two heatmaps are created and saved in the same file in the pathway_analysis folder using
           :func:`~mspypeline.plotting_backend.matplotlib_plots.save_heatmap_pathway_results`. The function also 
           saves the mean protein intensities and z-scores to csv files.
+        | If the last level was selected, the filter will NOT be applied and all protein intensities, instead of the mean intensities,
+          will be plotted.
 
         .. note::
             To determine which proteins are reliably detected an internal :ref:`threshold function
-            <thresholding>` is applied.
+            <thresholding>` is applied. This threshold function is NOT applied if the last level was selected for plotting.
         """
         plots = []
         for level in levels:
