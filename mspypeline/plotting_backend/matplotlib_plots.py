@@ -742,7 +742,7 @@ def save_pathway_analysis_results(
             "z_transform_mean": "csv_intensity/{pathway}_mean_z_transformed_intensity"})
 def save_heatmap_pathway_results(
         mean_intensities: pd.DataFrame, z_transform_mean: pd.DataFrame = None, pathway: str = "",
-        show_suptitle: bool = True, threshold: float = 0.05, intensity_label: str = "Intensity",
+        show_suptitle: bool = True, plot_intensity_label: str = "Intensity", plot_z_label: str = "Z-score",
         color_map: Optional[dict] = None, close_plots: str = "all", exp_has_techrep: bool = False, **kwargs
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
@@ -758,8 +758,10 @@ def save_heatmap_pathway_results(
         name of the pathway
     show_suptitle
         should the pathway name be shown as figure title
-    intensity_label
+    plot_intensity_label
         from which intensity was the data. will be shown on title of the mean intensities plot
+    plot_z_label
+        Label for the z-score plot, either "Mean z-score" or "Z-score"
     color_map
         a mapping from the column names to a color (NOT in use)
     close_plots
@@ -780,12 +782,12 @@ def save_heatmap_pathway_results(
     if len(level_keys_labels) == 0:
         level_keys_labels = level_keys
     with sns.axes_style("ticks"):
-        mean_intensities["dataType"] = f"Mean {intensity_label}"
-        z_transform_mean["dataType"] = "Mean z-score"
+        mean_intensities["dataType"] = plot_intensity_label
+        z_transform_mean["dataType"] = plot_z_label
         plot_data = pd.concat([mean_intensities, z_transform_mean])
         plot_data = plot_data.fillna(float('nan'))
         def heat(data, color):
-            if data.iloc[0,data.columns.get_loc('dataType')] == "Mean z-score":
+            if data.iloc[0,data.columns.get_loc('dataType')] == "Mean z-score" or data.iloc[0,data.columns.get_loc('dataType')] == "Z-score":
                 res = sns.heatmap(data.drop('dataType', axis=1),cmap='coolwarm',cbar_kws={"location": "top"}, center=0,
                             xticklabels=1, yticklabels=1, square=True, mask=data.drop('dataType', axis=1).isnull())
             else:
@@ -802,7 +804,7 @@ def save_heatmap_pathway_results(
             fig.fig.subplots_adjust(top=0.95)
             fig.fig.suptitle(f"{pathway}")
         fig.set_axis_labels("", "")
-        titles = [f'Mean {intensity_label}','Mean z-score']
+        titles = [plot_intensity_label,plot_z_label]
         for ax, title in zip(fig.axes.flatten(),titles):
             ax.set_title(title)
             ax.set_xticklabels(level_keys_labels)
