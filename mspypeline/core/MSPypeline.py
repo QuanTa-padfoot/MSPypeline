@@ -100,11 +100,9 @@ class MSPGUI(tk.Tk):
         self.normalize_options = ["None"] + list(default_normalizers.keys())
         self.mspinit = MSPInitializer(file_dir, yml_file, loglevel=loglevel)
         self.logger = get_logger(self.__class__.__name__, loglevel=loglevel)
-
         #icon = tk.PhotoImage(file = (os.path.dirname(os.path.abspath(__file__)) + '/GUI/mspypeline_ico.png'))
         #self.iconphoto(False, icon)
 
-        
         #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-light.tcl'))
         #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-dark.tcl'))
         self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/azure.tcl'))
@@ -184,6 +182,7 @@ class MSPGUI(tk.Tk):
         self.go_term_list.configure(exportselection=False)
         for x in self.mspinit.list_full_gos:
             self.go_term_list.insert("end", x)
+
         self.go_term_list.grid(row=6, column=0, columnspan=3,sticky=tk.W, padx=20)
         scrollbar_go = tk.Scrollbar(self,orient='vertical', command=self.go_term_list.yview)
         scrollbar_go.grid(row=6, column=2, sticky='nes', padx=20)
@@ -194,6 +193,7 @@ class MSPGUI(tk.Tk):
         self.pathway_list.configure(exportselection=False)
         for x in self.mspinit.list_full_pathways:
             self.pathway_list.insert("end", x)
+        
         self.pathway_list.grid(row=8, column=0, columnspan=3, sticky=tk.W, padx=20)
         scrollbar_pathway = tk.Scrollbar(self,orient='vertical', command=self.pathway_list.yview)
         scrollbar_pathway.grid(row=8, column=2, sticky='nes', padx=20)
@@ -253,9 +253,11 @@ class MSPGUI(tk.Tk):
         tab1 = ttk.Frame(tabControl)
         tab2 = ttk.Frame(tabControl)
         tab3 = ttk.Frame(tabControl)
+        tab4 = ttk.Frame(tabControl)
         tabControl.add(tab1, text ='Normalization')
         tabControl.add(tab2, text ='Outlier Detection')
         tabControl.add(tab3, text ='Statistical Inference')
+        tabControl.add(tab4, text ='Peptide analysis')
         tabControl.grid(row = 1, column=3, rowspan=self.heading_length, sticky=tk.NE, padx=20)
 
         ##Section Normalization
@@ -334,8 +336,10 @@ class MSPGUI(tk.Tk):
         self.plot_row("Heatmap Pathway", "heatmap_pathway",
                       "What is the intensity of my proteins of interest?", tab = tab3)
         #self.plot_row("Pathway Timecourse", "pathway_timecourse")
+        self.plots_per_section +=1
         self.plot_row("Go analysis", "go_analysis",
                       "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
+        self.plots_per_section +=1
         self.plot_row("Volcano plot (R)", "r_volcano",
                       "Which proteins are significantly higher or lower in intensity comparing two groups?\n Which proteins are detected only in one group and not in the other?", tab = tab3)
         # button for selecting samples to plot volcanoes
@@ -343,6 +347,7 @@ class MSPGUI(tk.Tk):
         volcano_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
         self.customize_sample_button(plot_text="volcano", tab=tab3)        
         
+        self.plots_per_section +=1
         self.plot_row("Time-course intensities (R)", "r_timecourse",
                       "What is the dynamics of the protein level across several condition?\n Genes to be plotted are detected from selected GO and Pathway gene lists",
                       tab=tab3)
@@ -350,15 +355,15 @@ class MSPGUI(tk.Tk):
         norm_method_label = ttk.Label(tab3, text="Settings for plotting timecourse:", font="Helvetica 10 bold")
         norm_method_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
         self.customize_sample_button(plot_text="timecourse", tab=tab3)
-        total_length = self.heading_length + self.number_of_plots
-        total_length = self.heading_length + self.number_of_plots
-
+        #total_length = self.heading_length + self.number_of_plots
+        #total_length = self.heading_length + self.number_of_plots
+        
         self.plots_per_section +=1
         self.plot_row("Peptide report", "peptide_report",
                       "Detailed report of each protein in selected pathway(s) based on peptide data\n Requires a .csv file containing data on the peptide level in a folder named `peptide`\n Internet is needed to download protein information from Uniprot.",
-                      tab=tab3)
+                      tab=tab4)
 
-        
+
         # add all tracing to the variables
         self.dir_text.trace("w", self.dir_setter)
         self.yaml_text.trace("w", self.yaml_path_setter)
@@ -589,13 +594,15 @@ class MSPGUI(tk.Tk):
             self.popup_window('Status Update', 'Tasks completed')
             #self.warningbox.updateInfo('Status Update', 'Tasks completed')
         elif self.err == KeyError:
-            self.popup_window(title='Status Update', message=('File could not be read with selected reader\nError code: ' + self.err.__name__), error=True)
+            self.popup_window(title='Status Update', message=('File could not be read with selected reader\nIf this is your first use after updating MSPypeline, please delete the config folder and try again\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
         ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         elif self.err == NotImplementedError:
             self.popup_window(title='Status Update', message=('A requested task is currently not implemented\nError code: ' + self.err.__name__), error = True)
         elif self.err == FileNotFoundError:
             self.popup_window(title='Status Update', message=('The directory you are working with is likely too long to save results\nCopy your data to another directory and try again :D\nError code: ' + self.err.__name__), error = True)
+        elif self.err == PermissionError:
+            self.popup_window(title='Status Update', message=('Result file(s) are currently open and cannot be modified\nPlease close those file(s) and try again :D\nError code: ' + self.err.__name__), error=True)
         else:
             self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
             #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
@@ -659,14 +666,13 @@ class MSPGUI(tk.Tk):
             self.normalizer_text = tk.StringVar(value="None")
             self.normalizer_button = ttk.OptionMenu(self, self.normalizer_text, self.normalize_options[0], *self.normalize_options)
             self.normalizer_button.grid(row=row, column=col)
-
             self.number_of_plots += 1
         else:
             col = 1
             row = self.heading_length + self.number_of_plots
             int_var = tk.IntVar(value=1)
-            self.normalizer_text = tk.StringVar(value="None")
-            self.normalizer_button = ttk.OptionMenu(tab, self.normalizer_text, self.normalize_options[0], *self.normalize_options)
+            self.normalizer_text = tk.StringVar(value= "None")
+            self.normalizer_button = ttk.OptionMenu(tab, self.normalizer_text,self.normalize_options[0], *self.normalize_options)
             self.normalizer_button.grid(row=row, column=col, sticky=tk.W, padx = 8)
 
             self.number_of_plots += 1
@@ -917,11 +923,11 @@ class MSPGUI(tk.Tk):
                     sample_list.select_set(sample_index)
             except ValueError:
                 normalizing_sample.select_set(0)
-
+            
             # Add note to do pathway analysis if one wants to get the timecourse data
             note2 = tk.Label(window, text="To get the protein intensities, please also do a Pathway analysis")
             note2.grid(row=7,column=0, sticky=tk.W)
-            
+
             def update_timecourse_settings():
                 samples_to_plot = []
                 errorbar = plot_errorbar.get()
