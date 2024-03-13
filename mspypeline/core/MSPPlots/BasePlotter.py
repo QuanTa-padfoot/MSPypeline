@@ -2206,7 +2206,7 @@ class BasePlotter:
             return {}
         # prepare data to plot time-series and peptide time-series
         if timepoints_dict != {}:
-            print("Pie")
+            pass
         else:
             pass
         all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
