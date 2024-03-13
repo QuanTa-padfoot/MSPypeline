@@ -19,6 +19,7 @@ from mspypeline.modules import default_normalizers, Normalization, DataTree
 from mspypeline.helpers import get_number_of_non_na_values, get_intersection_and_unique, \
     get_logger, dict_depth, add_end_docstrings, make_contrasts
 
+warnings.filterwarnings("ignore", message="UserWarning: R is not initialized by the main thread.")
 
 def validate_input(f):
     """
@@ -85,7 +86,7 @@ class BasePlotter:
 
     possible_plots = [
         "plot_detection_counts", "plot_detected_proteins_per_replicate", "plot_intensity_histograms",
-        "plot_relative_std", "plot_rank", "plot_pathway_analysis","plot_heatmap_pathway",
+        "plot_relative_std", "plot_rank", "plot_pathway_analysis", "plot_heatmap_pathway",
         "plot_scatter_replicates", "plot_experiment_comparison", "plot_go_analysis", "plot_venn_results",
         "plot_venn_groups", "plot_r_volcano", "plot_pca_overview",
         "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers",
@@ -182,10 +183,11 @@ class BasePlotter:
         self.file_dir_timecourse = os.path.join(self.start_dir, "timecourse")
         # path for peptide report
         self.file_dir_peptide = os.path.join(self.start_dir, "peptide","peptide_report")
+        
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
-        r_package_names = ("BiocManager", "gtools", "egg", "dplyr", "data.table", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales", "ggtext")
+        r_package_names = ("BiocManager", "gtools", "ggrepel", "egg", "dplyr", "data.table", "ggsci", "ggplot2", "tidyverse", "gridExtra", "matrixStats", "scales", "ggtext")
         r_bioconducter_package_names = ("limma", )
         install_r_dependencies(r_package_names, r_bioconducter_package_names)
 
@@ -275,6 +277,7 @@ class BasePlotter:
         try: plt.switch_backend('pdf')
         except: pass
         self.export_data()
+        # export data
         self.logger.info("Done creating plots")
 
     def add_intensity_column(self, option_name: str, name_in_file: str, name_in_plot: str,
@@ -390,8 +393,8 @@ class BasePlotter:
         raise NotImplementedError
 
     def export_data(self):
-        """Export (normalized) data. Data without the log2 transformation or those containing the string "normalized" 
-        are not considered (it is better to specify the type of normalization done, e.g., median_norm)."""
+        """Export normalized data. Data without the log2 transformation and those containing the string "normalized" 
+        are not considered (it is better to specify the type of normalization done)."""
         if not self.configs.get("export_data", False):
             return
         if not os.path.isdir(self.file_dir_data):
@@ -399,6 +402,8 @@ class BasePlotter:
         for df_to_use in self.all_intensities_dict:
             if "log2" in df_to_use and "normalized" not in df_to_use:
                 self.all_intensities_dict[df_to_use].to_csv(os.path.join(self.file_dir_data,f"{df_to_use}_intensities.csv"), sep=";", decimal=",", na_rep="NA", encoding="utf-8")
+
+    
 
     def get_venn_group_data(self, df_to_use: str, level: int, non_na_function=get_number_of_non_na_values):
         """
@@ -963,7 +968,7 @@ class BasePlotter:
             self.logger.warning("Skipping pathway %s in pathway analysis because no proteins were found", pathway)
             return {}
         protein_intensities = self.all_tree_dict[df_to_use].groupby(level, method=None, index=found_proteins).\
-            sort_index(0).sort_index(1, ascending=False)
+            sort_index(axis=0).sort_index(axis=1, ascending=False)
         significances = []
         for protein in protein_intensities.index:
             per_protein_significant = []
@@ -1029,7 +1034,7 @@ class BasePlotter:
                         plot = matplotlib_plots.save_pathway_analysis_results(**data, **plot_kwargs)
                         plots.append(plot)
         return plots
-
+    
     def get_heatmap_pathway_data(self, df_to_use: str, level: int, pathway: str, non_na_function=get_number_of_non_na_values):
         """
         | Filters out all proteins of the given pathways for all samples per group of the selected level, then
@@ -1061,7 +1066,7 @@ class BasePlotter:
             self.logger.warning("Heatmap: Skipping pathway %s  because no protein was found", pathway)
             return {}
         protein_intensities = self.all_tree_dict[df_to_use].groupby(level, method=None, index=found_proteins)
-        protein_intensities = protein_intensities.sort_index(axis=0).sort_index(axis=1, level=0)
+        protein_intensities = protein_intensities.sort_index(axis=1, level=0)
         # compute mean intensities 
         mean_intensities = protein_intensities.groupby(level=0, axis=1).mean()
         # perform z-transformation by scipy and compute the mean z score
@@ -1105,6 +1110,7 @@ class BasePlotter:
         | If the last level was selected, the filter will NOT be applied and all protein intensities, instead of the mean intensities,
           will be plotted.
 
+
         .. note::
             To determine which proteins are reliably detected an internal :ref:`threshold function
             <thresholding>` is applied. This threshold function is NOT applied if the last level was selected for plotting.
@@ -1122,7 +1128,7 @@ class BasePlotter:
                         plot = matplotlib_plots.save_heatmap_pathway_results(**data, **plot_kwargs)
                         plots.append(plot)
         return plots
-    
+
     def get_pathway_timeline_data(self):
         pass
 
@@ -1525,6 +1531,7 @@ class BasePlotter:
                 # if "default" was chosen: store all possible combinations in level_keys
                 elif "default" in s1:
                     level_keys = self.all_tree_dict[df_to_use].level_keys_full_name[level]
+                    print(level_keys)
                     level_keys = combinations(level_keys, 2)
                 # if sample1_list and sample2_list were specified: add these combinations to level_keys
                 else:
@@ -1593,6 +1600,8 @@ class BasePlotter:
         # import the r_timecourse_plot.R script
         ro.r(f'''source("{r_script_path}")''')
         # get plot settings from configs
+        plot_errorbar = self.configs["plot_r_timecourse_settings"].get("plot_errorbar")
+        align_yaxis =self.configs["plot_r_timecourse_settings"].get("align_yaxis")
         match_time_norm = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
         savedir = self.file_dir_timecourse.replace('\\', '/')
         ctrl_condition = self.configs["plot_r_timecourse_settings"].get("sample_to_normalize")
@@ -1610,14 +1619,14 @@ class BasePlotter:
         if not os.path.exists(signdir):
             os.makedirs(signdir)
             
-        # add variables to the R  global environment
+        # add variables to the R environment
         ro.globalenv['plot_conditions'] = ro.StrVector(plot_conditions)
         ro.globalenv['ctrl_condition'] = ctrl_condition
         ro.globalenv['savedir'] = savedir
-        ro.globalenv['plot_errorbar'] = self.configs["plot_r_timecourse_settings"].get("plot_errorbar")
-        ro.globalenv['align_yaxis'] = self.configs["plot_r_timecourse_settings"].get("align_yaxis")
+        ro.globalenv['plot_errorbar'] = plot_errorbar
+        ro.globalenv['align_yaxis'] = align_yaxis
         ro.globalenv['ifFDR'] = self.configs["plot_r_volcano_settings"].get("adj_pval")
-        ro.globalenv['match_time_norm'] = self.configs["plot_r_timecourse_settings"].get("matching_time_normalization")
+        ro.globalenv['match_time_norm'] = match_time_norm
         ro.globalenv['selected_normalizer'] = self.configs.get("selected_normalizer")
         
         for df_to_use in dfs_to_use:
@@ -1740,17 +1749,8 @@ class BasePlotter:
           dimensionality reduction (PCA) using ``sklearn.decomposition.PCA``. Multiple different analysis options can be
           chosen to generate a PCA (see: :ref:`multiple option config <default-yaml>`).
         | The results do not change in dependence on the chosen level, however, determining the level on which the data
-          should be compared influences the coloring and shaping of the scatter elements. Each group of the selected level is
-          colored differently. If the chosen level is not 0, each group of the level above the selected level is 
-          shaped differently. 
-        | If 2 components were selected, the loadings for the 2 PCs are retrieved from ``sklearn.decomposition.PCA.components_``
-          and plotted in a separate plot (1 dot = 1 protein). Protein names corresponding to the loadings are retrieved from 
-          ``sklearn.decomposition.PCA.feature_names_in_``. The 10 proteins that are the most distant from the center 
-          (distance = PC1^2 + PC2^2) are highlighted, unless pathway analysis list(s) are selected (i.e. self.interesting_proteins),
-          in which case the proteins in these list(s) will be highlighted instead. A version of the PCA loadings plot without the protein
-          names is included so users can label them to their liking.
-        | The PCA coordinates are exported in csv format.
-        | The data is plotted and saved using
+          should be compared influences the coloring of the scatter elements. Each group of the selected level is
+          colored differently. The data is plotted and saved using
           :func:`~mspypeline.plotting_backend.matplotlib_plots.save_pca_results`.
 
         | To view adjustable parameters see "plot_pca_overview_settings:" in the :ref:`Adjustable Options Configs
@@ -2164,7 +2164,7 @@ class BasePlotter:
             dfs_to_use=dfs_to_use, levels=levels, plot_function=self.plot_intensity_heatmap,
             file_name="heatmap_overview_all_normalizers", **plot_kwargs
         )
-
+    
     def read_peptide_data(self):
         raise NotImplementedError
 
@@ -2189,6 +2189,7 @@ class BasePlotter:
         
         """
         import requests
+        pd.options.mode.chained_assignment = None
         # subset the peptide data
         all_peptide_df = all_peptide_data.get("peptide_df")
         timepoints_dict = all_peptide_data.get("timepoints_dict")
@@ -2208,47 +2209,78 @@ class BasePlotter:
             pass
         else:
             pass
+        all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
+        # convert quantity columns ("all_sample_name") to float and replace "Filtered" with NaN
+        protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].replace(',', '.', regex=True)
+        protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].replace("Filtered", np.nan)
+        protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].astype(float)
+        # remove charge state from precursor strings
+        protein_peptide_data.loc[:,"EG.PrecursorId"] = [precursor.split("_")[1] for precursor in protein_peptide_data["EG.PrecursorId"]]
+        # make a dictionary to match precursors with peptides
+        precursor_peptide_match = {protein_peptide_data.loc[i,"EG.PrecursorId"]: protein_peptide_data.loc[i,"PEP.StrippedSequence"] for i in protein_peptide_data.index}
+        # sum over precursors with different charge states. Those with PTM are kept separate
+        peptide_df = pd.DataFrame(np.nan, index=protein_peptide_data["EG.PrecursorId"].unique(), columns=all_sample_name)
+        for precursor in peptide_df.index:
+            peptide_df.loc[precursor,all_sample_name] = protein_peptide_data.loc[protein_peptide_data["EG.PrecursorId"]==precursor,all_sample_name].sum(axis=0, min_count=1)
+        peptide_df = peptide_df.transform(lambda x: np.log2(x))
         ##########################################################
         # prepare data to plot the sequence coverage
         ##########################################################
         uniprotID = protein_peptide_data.iloc[0, protein_peptide_data.columns.get_loc("PG.ProteinGroups")]
-        all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
-        peptide_detection = protein_peptide_data.copy()
-        peptide_detection.loc[:,all_sample_name] = peptide_detection.loc[:,all_sample_name].notna().astype(int)
-        try:
-            # Make request to uniprot entry fasta file
-            url=f"https://rest.uniprot.org/uniprotkb/{uniprotID}.fasta"
-            r = requests.post(url) 
-            fasta=''.join(r.text)
-            sequence = "".join(fasta.split("\n")[1:])
-            peptide_sequence_in_protein = protein_peptide_data["PEP.StrippedSequence"].unique()
-            all_peptide_pos = {}
-            for peptide_sequence in peptide_sequence_in_protein:
-                start_pos = sequence.find(peptide_sequence)
-                end_pos = start_pos + len(peptide_sequence) 
-                if start_pos == -1:
-                    continue
-                else:
-                    all_peptide_pos[peptide_sequence] = [start_pos, end_pos]
-            # initiate a dataframe for plotting
-            heatmap_dataset = pd.DataFrame(0, columns=range(len(sequence)), index=all_conditions)
-            heatmap_dataset.sort_index(axis=0, inplace=True)
-            # update heatmap
-            for condition in all_conditions:
-                filter_col = self.all_tree_dict[df_to_use][condition].aggregate(None).columns
-                
-                for sample in filter_col:
-                    detection_sample = [False for i in heatmap_dataset.columns]
-                    for peptide in all_peptide_pos.keys():
-                        if peptide_detection.loc[peptide_detection["PEP.StrippedSequence"]==peptide,sample].sum() > 0:
-                            start_pos, end_pos = all_peptide_pos[peptide]
-                            detection_sample[start_pos:end_pos] = [True] * (end_pos - start_pos)
-                    heatmap_dataset.loc[condition,:] += detection_sample
-        
-            heatmap_dataset.columns += 1  # adjust positions so it starts with 1, not 0 as in python indexing
-        except:
-            self.logger.warning("Cannot retrieve peptide sequence from Uniprot. Please check your Internet connection.")
-        return {"uniprotID": uniprotID,"peptide_coverage": heatmap_dataset}
+        peptide_detection = peptide_df.copy()
+        peptide_detection = peptide_detection.notna().astype(int)
+        # Make request to uniprot entry fasta file
+        url=f"https://rest.uniprot.org/uniprotkb/{uniprotID}.fasta"
+        r = requests.post(url) 
+        fasta=''.join(r.text)
+        sequence = "".join(fasta.split("\n")[1:])
+        peptide_sequence_in_protein = protein_peptide_data["PEP.StrippedSequence"].unique()
+        all_peptide_pos = {}
+        for peptide_sequence in peptide_sequence_in_protein:
+            start_pos = sequence.find(peptide_sequence)
+            end_pos = start_pos + len(peptide_sequence) 
+            if start_pos == -1:
+                continue
+            else:
+                all_peptide_pos[peptide_sequence] = [start_pos, end_pos]
+        # initiate a dataframe for plotting the heatmap
+        heatmap_dataset = pd.DataFrame(0, columns=range(len(sequence)), index=all_conditions)
+        heatmap_dataset.sort_index(axis=0, inplace=True)
+        percent_coverage_dict = {"sample":[], "percent_coverage":[]}
+        # update heatmap
+        for condition in all_conditions:
+            filter_col = self.all_tree_dict[df_to_use][condition].aggregate(None).columns
+            for sample in filter_col:
+                detection_sample = [False for i in heatmap_dataset.columns]
+                for peptide in all_peptide_pos.keys():
+                    precursor = [k for k, v in precursor_peptide_match.items() if v == peptide]
+                    if peptide_detection.loc[precursor,sample].sum() > 0:
+                        start_pos, end_pos = all_peptide_pos[peptide]
+                        detection_sample[start_pos:end_pos] = [True] * (end_pos - start_pos)
+                heatmap_dataset.loc[condition,:] += detection_sample
+                percent_coverage_dict["sample"].append(sample)
+                percent_coverage_dict["percent_coverage"].append(sum(detection_sample)/len(detection_sample)*100)
+        heatmap_dataset.columns += 1  # adjust positions so it starts with 1, not 0 as in python indexing
+        percent_coverage_df = pd.DataFrame(percent_coverage_dict)
+        percent_coverage_df["percent_coverage"] = percent_coverage_df["percent_coverage"].round(decimals=1)
+        ###########################################################
+        # prepare data to plot peptide abundance
+        ############################################################
+        # create MultiIndex for grouping
+        level_keys = []
+        for sample in peptide_df.columns:
+            sample_split = sample.split("_")
+            level_keys.append("_".join(sample_split[:level+1]))
+        peptide_df.columns = pd.MultiIndex.from_arrays([level_keys, peptide_df.columns], names=[f"level_{level}","sample_name"])
+        ############################################################
+        # prepare data to plot ratio to the mean
+        ############################################################
+        peptide_mean = peptide_df.mean(axis=1, skipna=True)
+        peptide_ratio = peptide_df.sub(peptide_mean, axis=0)
+
+        return {"uniprotID": uniprotID,  "n_peptide": peptide_df.shape[0], 
+                "peptide_coverage": heatmap_dataset, "percent_coverage_df": percent_coverage_df.sort_values("percent_coverage",ascending=False),
+                "peptide_abundance": peptide_df, "precursor_peptide_match": precursor_peptide_match,"all_peptide_pos":all_peptide_pos, "peptide_ratio": peptide_ratio}
 
     @add_end_docstrings(plot_para_return_docstring.format(
         ":func:`~mspypeline.plotting_backend.matplotlib_plots.save_peptide_report_results`"

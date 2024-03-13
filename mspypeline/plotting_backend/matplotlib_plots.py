@@ -26,6 +26,8 @@ import seaborn as sns
 from mspypeline.helpers import get_number_rows_cols_for_fig, plot_annotate_line, get_legend_elements, \
     get_plot_name_suffix, venn_names, format_docstrings
 
+warnings.filterwarnings("ignore", message="meta NOT subset; don't know how to subset; dropped")
+
 FIG_FORMAT = ".pdf"
 rcParams["pdf.fonttype"] = 42
 rcParams["ps.fonttype"] = 42
@@ -469,12 +471,13 @@ def save_volcano_results(
 @save_plot("pca_overview")
 @format_docstrings(kwargs=_get_path_and_name_kwargs_doc)
 def save_pca_results(
-        pca_data: pd.DataFrame, pca_fit: PCA = None, interesting_proteins = None, normalize: bool = True, intensity_label: str = "Intensity",
-        color_map: Optional[dict] = None, shape_map: Optional[dict] = None, show_suptitle: bool = True, marker_size: int = 150,
+        pca_data: pd.DataFrame, pca_fit: PCA = None, interesting_proteins = None,normalize: bool = True, intensity_label: str = "Intensity",
+        color_map: Optional[dict] = None, shape_map: Optional[dict] = None,
+        show_suptitle: bool = True, marker_size: int = 150,
         legend_marker_size: int = 12, close_plots: str = "all", exp_has_techrep: bool = False, **kwargs
 ) -> Tuple[plt.Figure, plt.Axes]:
     """
-    Saves image containing the pca results with prefix: {{name}} and the PCA coordinates
+    Saves image containing the pca results with prefix: {{name}}
 
     Parameters
     ----------
@@ -482,14 +485,14 @@ def save_pca_results(
         DataFrame containing transformed/dimensionally-reduced data with which PCA was performed
     pca_fit
         PCA object that was fitted to normalized input data
+    interesting_proteins
+        mapping of pathways that shoul be annotated in the PCA loading plot
     normalize
         should the transformed data be normalized with the singular values before plotting
     intensity_label
         figure title
     color_map
         mapping from column name to color if custom colors are wanted
-    shape_map
-        mapping from column name to shape if custom shapes are wanted
     show_suptitle:
         should the figure title be shown
     marker_size
@@ -520,6 +523,7 @@ def save_pca_results(
         base_shape_map.update(shape_map)
     color_map = {} if color_map is None else color_map
     base_color_map.update(color_map)
+    
     if normalize and pca_fit is None:
         warnings.warn("Normalizing not possible when pca_fit is None")
     elif normalize and pca_fit is not None:
@@ -632,7 +636,6 @@ def save_pca_results(
                     ax.set_xlabel(f"PC {row_pc} - {pca_var[row]}", fontsize=22, labelpad=20)
                     ax.set_ylabel(f"PC {col_pc} - {pca_var[col]}", fontsize=22, labelpad=20)
                     ax.tick_params(axis="both", labelsize=18)
-
     if show_suptitle:
         fig.suptitle(intensity_label + (TECHREP_SUFFIX if exp_has_techrep else ""), fontsize=30)
     fig.legend(handles=legend_elements, bbox_to_anchor=(1.01, 0.93), loc="upper left", 
@@ -814,6 +817,7 @@ def save_heatmap_pathway_results(
         path, plot_name = get_path_and_name_from_kwargs(name="plots/{pathway}_heatmap", pathway=pathway, **kwargs)
         save_plot_func(fig, path, plot_name, save_pathway_analysis_results, **kwargs)
     return fig
+
 
 @save_plot("boxplot")
 @format_docstrings(kwargs=_get_path_and_name_kwargs_doc)
@@ -2050,20 +2054,53 @@ def save_venn(
     return fig, ax
 
 def save_peptide_reports(
-        peptide_coverage: pd.DataFrame, gene: str, uniprotID, save_path: str, file_name: str, level: int, close_plots: str = "all", 
+        gene: str, uniprotID: str="", n_peptide: int=None,
+        peptide_coverage: pd.DataFrame=pd.DataFrame({}), percent_coverage_df: pd.DataFrame=pd.DataFrame({}),
+        peptide_abundance: pd.DataFrame=pd.DataFrame({}), peptide_ratio: pd.DataFrame=pd.DataFrame({}),
+        precursor_peptide_match: dict={}, all_peptide_pos: dict={},save_path: str="", file_name: str="", level: int=None, close_plots: str = "all", 
         exp_has_techrep: bool = False, **kwargs
 ):
+    if close_plots is not None:
+        plt.close(close_plots)
     with PdfPages(os.path.join(save_path, file_name)) as pdf:
+        #######################################################
+        # Start page with general info
+        #######################################################
         fig = plt.figure(figsize=(14, 7))
         fig.text(0.5, 0.92, f"{gene} peptide report", size=25,transform=fig.transFigure,ha="center")
         fig.text(0.5, 0.85, f"Uniprot ID: {uniprotID}", size=20,transform=fig.transFigure,ha="center")
+        #fig.text(0.5, 0.8, f"Number of detected precursors: {n_precursor}", size=20,transform=fig.transFigure,ha="center")
+        fig.text(0.5, 0.8, f"Number of detected peptides: {n_peptide}", size=20,transform=fig.transFigure,ha="center")
         pdf.savefig()
         plt.close(fig)
         #######################################################
-        # plot peptide coverage
+        # plot overview
+        ######################################################
+        fig, ax = plt.subplots(1,1,figsize=(10,6))
+        if all_peptide_pos != {}:
+            length = [len(x) for x in all_peptide_pos.keys()]
+            len_con = {x: length.count(x) for x in set(length)}
+            l, h = len_con.keys(), len_con.values()
+            ax.bar(l, h, color="lightblue", edgecolor="royalblue", linewidth=2)
+            ax.tick_params(axis="both", which="major", labelsize=14)
+            ax.set_title("Histogram of peptide length", fontsize = 26)
+            ax.set_ylabel("count", fontsize = 16)
+            ax.set_xlabel("Peptide length", fontsize=16)
+        if precursor_peptide_match != {} or not peptide_abundance.empty:
+            try: 
+                precursor = precursor_peptide_match.keys()
+            except:
+                precursor = peptide_abundance.index
+
+        pdf.savefig(figure=fig)
+        plt.close(fig)
+            #ax.xaxis.set_major_locator(ticker.MultipleLocator(base=1))
+        
+        #######################################################
+        # plot heatmap of peptide coverage
         #######################################################
         if not peptide_coverage.empty:
-            plt.figure(figsize=(0.07*peptide_coverage.shape[1]+2,0.7*peptide_coverage.shape[0]+1.5))
+            plt.figure(figsize=(0.07*peptide_coverage.shape[1]+0.5,0.7*peptide_coverage.shape[0]+3))
             hm_tick_pos = list(range(0,peptide_coverage.shape[1]+1,25))
             hm_tick_pos[0] = 1
             hm_tick_label = [None] * peptide_coverage.shape[1]
@@ -2073,13 +2110,14 @@ def save_peptide_reports(
             hm = sns.heatmap(peptide_coverage, 
                 yticklabels = [item.replace("_", " ") for item in peptide_coverage.index],
                 cmap = sns.color_palette("rocket_r", n_colors=ncols),
-                cbar_kws = dict(orientation = 'horizontal', shrink = 0.5, pad = 0.1)
+                cbar_kws = dict(orientation = 'horizontal', shrink = 0.5, pad = 0.2)
                 )
             hm.set_xticks([i-1 for i in hm_tick_pos])
             hm.set_xticklabels(hm_tick_pos)
             plt.yticks(rotation=0)
             plt.xticks(rotation=45)
             plt.title("Peptide coverage", fontsize=24, fontweight="bold")
+            plt.xlabel("")
             hm.tick_params(labelsize=20)
             colorbar = hm.collections[0].colorbar
             colorbar.ax.tick_params(labelsize=20)
@@ -2089,7 +2127,99 @@ def save_peptide_reports(
             colorbar.set_ticklabels(range(0, ncols))
             #hm.collections[0].colorbar.set_ticks(np.linspace(start=0, stop=ncols-1, num=ncols))
             colorbar.ax.set_title("Number of detections", fontsize=20)
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
             fig = hm.get_figure()
+            #fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+            pdf.savefig(figure=fig)
+            plt.close(fig)
+        #######################################################
+        # plot percentage of sequence coverage
+        #######################################################
+        if not percent_coverage_df.empty:
+            plot = sns.barplot(data=percent_coverage_df, x="percent_coverage", y="sample",color="#ff6347",
+                                errorbar=None)
+            plot.set_yticklabels([item.replace("_"," ") for item in percent_coverage_df["sample"]])
+            plot.bar_label(plot.containers[0], fontsize=15)
+            plt.xlabel("Coverage of the protein's peptide sequence (%)", fontsize=20)
+            plt.ylabel("")
+            plot.set_xlim([0,100])
+            plot.tick_params(labelsize=20)
+            plt.gcf().set_size_inches(14, 0.5*len(percent_coverage_df["sample"])+1.5)
+            fig = plot.figure
             fig.tight_layout(rect=[0, 0.03, 1, 0.95])
             pdf.savefig(figure=fig)
             plt.close(fig)
+        #########################################################
+        # plot peptide abundance
+        #########################################################
+        if not peptide_abundance.empty:
+            level_keys = list(peptide_abundance.columns.get_level_values(0).unique())
+            level_keys_labels = [key.replace("_", " ") for key in level_keys]
+            n_rows, n_cols = get_number_rows_cols_for_fig(peptide_abundance.index)
+            # sort peptides based on their starting point
+            precursor_order = pd.DataFrame({"peptide": peptide_abundance.index,
+                                            "start_position": [all_peptide_pos[precursor_peptide_match[p]][0] for p in peptide_abundance.index]
+            })
+            precursor_order.sort_values("start_position", ascending=True, inplace= True)
+            fig, axarr = plt.subplots(n_rows, n_cols, figsize=(n_cols * 5, int(n_rows * len(level_keys) / 1.1)))
+            for i in range(n_rows * n_cols - len(peptide_abundance.index)):
+                axarr[n_rows - 1, n_cols - 1 - i].remove()
+            fig.suptitle("Intensities of peptides (sum of intensities of precursors with different charges)" + (TECHREP_SUFFIX if exp_has_techrep else ""), size=26)
+            for precursor, (pos, ax) in zip(precursor_order["peptide"], np.ndenumerate(axarr)):
+                peptide = precursor_peptide_match[precursor]
+                start, end = all_peptide_pos[peptide]
+                ax.scatter(peptide_abundance.loc[precursor],
+                       [level_keys.index(c) for c in peptide_abundance.columns.get_level_values(0)],
+                        #c=[result_color_map[c] for c in protein_intensities.columns.get_level_values(0)], edgecolors="none",
+                       c="#ff6347", alpha=0.75)
+                ax.set_title(f"{precursor}\nposition {start}-{end}")
+                ax.set_ylim((-1, len(level_keys)))
+                ax.set_yticks([i for i in range(len(level_keys))])
+                if len(level_keys_labels) == 0:
+                    ax.set_yticklabels(level_keys)
+                else:
+                    ax.set_yticklabels(level_keys_labels)
+                ax.set_xlabel("Log2 intensities")
+            fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+            pdf.savefig(figure=fig)
+            plt.close(fig)
+        ############################################################
+        # map peptide abundance to their position on the proteins
+        ############################################################
+        if not peptide_ratio.empty:
+            level_keys = list(peptide_ratio.columns.get_level_values(0).unique())
+            # sort peptides based on their starting point
+            plot_data = peptide_ratio.copy()
+            plot_data["_peptide"] = plot_data.index
+            plot_data["_start_pos"] = [all_peptide_pos[precursor_peptide_match[p]][0] for p in plot_data.index]
+            plot_data["_end_pos"] = [all_peptide_pos[precursor_peptide_match[p]][1] for p in plot_data.index]
+            plot_data["_peptide"] = plot_data["_peptide"] + " [" + plot_data["_start_pos"].astype(str) + "-" + plot_data["_end_pos"].astype(str) + "]"
+            max_peptide_length = max([len(peptide) for peptide in plot_data["_peptide"]])
+            plot_data = pd.melt(plot_data, id_vars = ["_peptide", "_start_pos", "_end_pos"], col_level=0)
+            plot_data.columns = ["peptide", "start_pos", "end_pos", "Group", "intensity"]
+            group_key = [key.replace("_", " ") for key in plot_data["Group"]]
+            plot_data["Group"] = group_key
+            plot_data.sort_values(["start_pos", "Group"], ascending=[True,True], inplace=True)
+            # plot!
+            with sns.axes_style("whitegrid"):
+                plot = sns.catplot(plot_data, x="peptide",y="intensity", hue="Group", kind="bar", 
+                                   errorbar="sd", 
+                                   legend=False)
+                #sns.pointplot(plot_data, x="peptide",y="intensity", hue="Group", 
+                                   #errorbar="sd", 
+                #                   legend=False, ax = plot)
+                
+                plot.tick_params(labelsize=20)
+                plt.legend(bbox_to_anchor=(1,0.5),fontsize=20, markerscale=3)
+                plt.xlabel("")
+                plt.ylabel("Log2 intensity ratio (mean ± sd)", fontsize=20)
+                plt.title(f"{gene} peptide quantification", fontsize=24, fontweight="bold")
+                plt.xticks(rotation=90)
+                plt.gcf().set_size_inches(0.3*len(level_keys)*peptide_ratio.shape[0]+3,15+max_peptide_length*0.08)
+                fig = plot.figure
+                fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+                pdf.savefig(figure=fig)
+                plt.close(fig)
+            
+
+            
