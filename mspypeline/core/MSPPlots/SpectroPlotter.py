@@ -74,8 +74,8 @@ class SpectroPlotter(BasePlotter):
         )
         default_kwargs.update(**kwargs)
         return super().from_file_reader(reader_instance, **kwargs)
-
-    def read_peptide_data(self, dir_peptide_data_folder = None, log2_transformed = False, time_level = None):
+        
+    def read_peptide_data(self, dir_peptide_data_folder = None, time_level = None):
         """Read and preprocess the .csv file containing peptide data from Spectronaut. The data is first log2-transformed by default.
         Rows with multiple protein names are split to separate rows, one for each protein. The time points are detected from the sample names.
         By default (i.e., if time_level is None), the second-to-last level in analysis_design is used for the detection.
@@ -85,15 +85,13 @@ class SpectroPlotter(BasePlotter):
         dir_peptide_data_folder
             directory of the folder containing the peptide data, which must be in .csv or .tsv format. If None, MSPypeline will search in a folder named `peptide_data` in the current directory
             The folder `peptide_data` should contain only 1 .csv or .tsv file to avoid reading the wrong file
-        log2_transformed
-            Whether the data has been log2-transformed. If False, this function will log2-transform the data
         time_level
             Which level in analysis_design the time points or doses were declared. If None, the second-to-last level will be used
 
         Returns
         --------
         peptide_df
-            Dataframe containing the log2 expression value of the peptides.
+            Dataframe containing the expression value of the peptides.
         timepoints_dict
             Dictionary specifying the time points or dose for each sample.
         time_numerical_dict
@@ -121,24 +119,20 @@ class SpectroPlotter(BasePlotter):
         for cur_separator in ['\t', ';', ',']:
             try:
                 peptide_df = pd.read_csv(peptide_dir, delimiter=cur_separator, dtype=str)
-                if peptide_df.shape[1] > 4:
+                if ('PG.ProteinGroups' in peptide_df.columns) and ('PG.Genes' in peptide_df.columns) and ('PEP.StrippedSequence' in peptide_df.columns) and ('EG.PrecursorId' in peptide_df.columns):
                     break
             except (ValueError):
                 pass
+        # remove "PG.IsSingleHit", ".EG.Quantity", and ".Qvalue" columns
+        peptide_df.drop(peptide_df.filter(regex='PG.IsSingleHit|PG.Quantity|EG.Qvalue').columns, axis=1, inplace=True)
         # rename columns
-        all_quant_cols = peptide_df.filter(regex="TotalQuantity").columns.to_list()
-        all_prefixes = [s.split(".raw")[0] for s in all_quant_cols]
-        all_prefixes = [s.split(".PG")[0] for s in all_prefixes]
+        all_quant_cols = peptide_df.filter(regex="EG.TotalQuantity").columns.to_list()
+        all_prefixes = [s.split(".EG")[0] for s in all_quant_cols]
+        all_prefixes = [s.split(".raw")[0] for s in all_prefixes]
         all_sample_name = [s.split("] ")[1] for s in all_prefixes]
         rename_dict = {all_quant_cols[i]: all_sample_name[i] for i in range(len(all_quant_cols))} 
         peptide_df.rename(columns=rename_dict, inplace= True)
-        # convert quantity columns ("all_sample_name") to float and replace "Filtered" with 0
-        peptide_df[all_sample_name] = peptide_df[all_sample_name].replace(',', '.', regex=True)
-        peptide_df[all_sample_name] = peptide_df[all_sample_name].replace("Filtered", np.nan)
-        peptide_df[all_sample_name] = peptide_df[all_sample_name].astype(float)
-        # log2- trasnform the data if not transformed yet
-        if not log2_transformed:
-            peptide_df[all_sample_name] = peptide_df[all_sample_name].transform(lambda x: np.log2(x))
+        
         # get the time point or dose at the second-to-last level, if applicable
         n_level = len(all_sample_name[0].split("_"))
         if time_level is None and n_level > 1:
