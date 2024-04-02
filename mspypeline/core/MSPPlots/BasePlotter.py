@@ -1066,7 +1066,8 @@ class BasePlotter:
             self.logger.warning("Heatmap: Skipping pathway %s  because no protein was found", pathway)
             return {}
         protein_intensities = self.all_tree_dict[df_to_use].groupby(level, method=None, index=found_proteins)
-        protein_intensities = protein_intensities.sort_index(axis=1, level=0)
+        protein_intensities = protein_intensities.loc[self.interesting_proteins[pathway]].sort_index(axis=1, level=0)
+        protein_intensities.dropna(axis = 0, how = 'all', inplace = True)
         # compute mean intensities 
         mean_intensities = protein_intensities.groupby(level=0, axis=1).mean()
         # perform z-transformation by scipy and compute the mean z score
