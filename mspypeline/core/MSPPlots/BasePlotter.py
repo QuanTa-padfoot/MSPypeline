@@ -1065,8 +1065,9 @@ class BasePlotter:
         if len(found_proteins) < 1:
             self.logger.warning("Heatmap: Skipping pathway %s  because no protein was found", pathway)
             return {}
+        found_proteins = sorted(found_proteins, key=lambda x:self.interesting_proteins[pathway].index(x))
         protein_intensities = self.all_tree_dict[df_to_use].groupby(level, method=None, index=found_proteins)
-        protein_intensities = protein_intensities.loc[self.interesting_proteins[pathway]].sort_index(axis=1, level=0)
+        protein_intensities = protein_intensities.loc[found_proteins].sort_index(axis=1, level=0)
         protein_intensities.dropna(axis = 0, how = 'all', inplace = True)
         # compute mean intensities 
         mean_intensities = protein_intensities.groupby(level=0, axis=1).mean()
