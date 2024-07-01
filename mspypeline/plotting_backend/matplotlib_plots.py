@@ -582,6 +582,10 @@ def save_pca_results(
         loadings = pd.DataFrame(loadings)
         loadings.rename(index={0:'PC1',1: 'PC2'}, columns={i: pca_fit.feature_names_in_[i] for i in range(pca_fit.n_features_)}, inplace = True)
         loadings = loadings.transpose()
+
+        # save PCA loading results to a csv file
+        path, csv_name = get_path_and_name_from_kwargs(name="PCA_loadings", pathway="outliers_detection_and_comparison", **kwargs)
+        save_csv_fn(path,csv_name, loadings)
         # If list of proteins of interest chosen (pathway list) then annotate them, otherwise annotate the 10 most extreme proteins
         if interesting_proteins.values():
             all_pathway_proteins = set.union(*(set(x) for x in interesting_proteins.values()))
