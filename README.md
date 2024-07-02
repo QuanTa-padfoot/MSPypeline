@@ -57,7 +57,7 @@ After successful installation, the Powershell prompt will print:
 Please restart your computer.
 ```
 
-Note: A timeout error sometimes occur due to proxy servers. Please see the instruction from Anaconda [(link)](https://docs.anaconda.com/free/anaconda/configurations/proxy/) to solve this issue.
+Note: A timeout error sometimes occur due to proxy servers. Please see the instruction from Anaconda [(link)](https://docs.anaconda.com/working-with-conda/reference/security/) to solve this issue.
 
 # Getting started
 Before using MSPypeline, you need to define the R file's location in the powershell prompt (e.g.):
