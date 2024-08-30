@@ -1067,14 +1067,9 @@ class BasePlotter:
         if len(found_proteins) < 1:
             self.logger.warning("Heatmap: Skipping pathway %s  because no protein was found", pathway)
             return {}
-        print("0")
         protein_intensities = self.all_tree_dict[df_to_use].groupby(level, method=None, index=found_proteins)
-        print("1")
-        print(self.interesting_proteins[pathway])
-        print(len(self.interesting_proteins[pathway]))
         found_proteins = sorted(found_proteins, key=lambda x:self.interesting_proteins[pathway].index(x))
         protein_intensities = protein_intensities.loc[found_proteins].sort_index(axis=1, level=0)
-        print("2")
         protein_intensities.dropna(axis = 0, how = 'all', inplace = True)
         # compute mean intensities 
         mean_intensities = protein_intensities.groupby(level=0, axis=1).mean()
@@ -2215,7 +2210,7 @@ class BasePlotter:
             return {}
         # prepare data to plot time-series and peptide time-series
         if timepoints_dict != {}:
-            print("Pie")
+            pass
         else:
             pass
         all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
