@@ -90,7 +90,7 @@ class BasePlotter:
         "plot_scatter_replicates", "plot_experiment_comparison", "plot_go_analysis", "plot_venn_results",
         "plot_venn_groups", "plot_r_volcano", "plot_pca_overview",
         "plot_normalization_overview_all_normalizers", "plot_heatmap_overview_all_normalizers",
-        "plot_r_timecourse", "plot_peptide_report"
+        "plot_r_timecourse", "plot_peptide_report", "plot_r_MA"
     ]
 
     def __init__(
@@ -179,6 +179,8 @@ class BasePlotter:
         self.file_dir_go_analysis = os.path.join(self.start_dir, "go_analysis")
         # path for volcano plots
         self.file_dir_volcano = os.path.join(self.start_dir, "volcano")
+        # path for MA plots
+        self.file_dir_MA = os.path.join(self.start_dir, "MA")
         # path for timecourse plots
         self.file_dir_timecourse = os.path.join(self.start_dir, "timecourse")
         # path for peptide report
@@ -1065,8 +1067,8 @@ class BasePlotter:
         if len(found_proteins) < 1:
             self.logger.warning("Heatmap: Skipping pathway %s  because no protein was found", pathway)
             return {}
-        found_proteins = sorted(found_proteins, key=lambda x:self.interesting_proteins[pathway].index(x))
         protein_intensities = self.all_tree_dict[df_to_use].groupby(level, method=None, index=found_proteins)
+        found_proteins = sorted(found_proteins, key=lambda x:self.interesting_proteins[pathway].index(x))
         protein_intensities = protein_intensities.loc[found_proteins].sort_index(axis=1, level=0)
         protein_intensities.dropna(axis = 0, how = 'all', inplace = True)
         # compute mean intensities 
@@ -2279,7 +2281,6 @@ class BasePlotter:
         ############################################################
         peptide_mean = peptide_df.mean(axis=1, skipna=True)
         peptide_ratio = peptide_df.sub(peptide_mean, axis=0)
-
         return {"uniprotID": uniprotID,  "n_peptide": peptide_df.shape[0], 
                 "peptide_coverage": heatmap_dataset, "percent_coverage_df": percent_coverage_df.sort_values("percent_coverage",ascending=False),
                 "peptide_abundance": peptide_df, "precursor_peptide_match": precursor_peptide_match,"all_peptide_pos":all_peptide_pos, "peptide_ratio": peptide_ratio}
@@ -2330,4 +2331,175 @@ class BasePlotter:
                         plot_kwargs.update(**kwargs)
                         plot = matplotlib_plots.save_peptide_reports(**peptide_data, **plot_kwargs)
                         
+        return plots
+
+    def get_r_MA_data(self, g1: str, g2: str, df_to_use: str):
+        """
+        This is exactly like get_r_volcano_data(), just with different names 
+        | Gets the protein intensities for all samples of the two given groups, then calculates the proteins that can be
+          compared between groups and those unique for each group (see :ref:`thresholding`).
+        | Hands over the protein intensities to be compared to the R package ``limma`` that outputs the logFC, p-value,
+          adjusted p value (`Benjamini + Hochberg
+          <https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/p.adjust>`__) and other data which is
+          calculated based on a `moderated t-statistic
+          <https://bioconductor.org/packages/release/bioc/vignettes/limma/inst/doc/usersguide.pdf>`__. P-value
+          calculations are corrected for the `intensity-variance relationship
+          <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-7-538#citeas>`__.
+        | Results are converted back to python format afterwards.
+
+        .. note::
+            This function uses the R package limma which is automatically downloaded the first time this analysis
+            is performed.
+
+        Parameters
+        ----------
+        g1
+            first sample that should be analysed (downregulated)
+        g2
+            second sample that should be analysed (upregulated)
+        df_to_use
+            which dataframes/intensities should be analysed
+
+        Returns
+        -------
+        Dict
+            Dictionary with keys *"MA_data"* to a DataFrame containing processed output of the ``limma.eBayes``
+            analysis, *"unique_g1"* and *"unique_g2"* to Series containing the unique protein intensities per group
+
+        """
+
+        # import r interface package
+        import rpy2.robjects as ro
+        from rpy2.robjects import pandas2ri
+        from rpy2.robjects.packages import importr
+        from rpy2.robjects.conversion import localconverter
+        # allow conversion of pd objects to r
+        pandas2ri.activate()
+
+        # import r packages
+        limma = importr("limma")
+        # get data of the samples
+        v1 = self.all_tree_dict[df_to_use][g1].aggregate(None)
+        v2 = self.all_tree_dict[df_to_use][g2].aggregate(None)
+        if v2.shape[1] < 2 or v2.shape[1] < 2:
+            self.logger.warning("Skipping MA plot for comparison: %s, %s because the groups contain only "
+                                "%s and %s experiments", g1, g2, v1.shape[1], v2.shape[1])
+            return {}
+        mask, exclusive_1, exclusive_2 = get_intersection_and_unique(v1, v2)
+
+        df = pd.concat([v1[mask], v2[mask]], axis=1)
+        design = pd.DataFrame([[0] * v1.shape[1] + [1] * v2.shape[1],
+                               [1] * v1.shape[1] + [0] * v2.shape[1]], index=[g2, g1]).T
+
+        if df.empty:
+            return {}
+        # transform to r objects
+        with localconverter(ro.default_converter + pandas2ri.converter):
+            r_df = ro.conversion.py2rpy(df)
+            r_design = ro.conversion.py2rpy(design)
+        # run the r code
+        fit = limma.lmFit(r_df, r_design)
+        c_matrix = make_contrasts(g1, g2)
+        contrast_fit = limma.contrasts_fit(fit, c_matrix.values)
+        fit_bayes = limma.eBayes(contrast_fit, trend=True)
+        res = limma.topTable(fit_bayes, adjust="BH", number=df.shape[0])
+        # transform back to python
+        with localconverter(ro.default_converter + pandas2ri.converter):
+            # positive is upregulated in v2 / g2
+            ress = ro.conversion.rpy2py(res)
+        # possible names are keys of this dict
+        plot_data = ress.loc[:, ["logFC", "AveExpr", "P.Value", "adj.P.Val"]]
+        plot_data = plot_data.rename({"P.Value": "pval", "adj.P.Val": "adjpval"}, axis=1)
+        # calculate mean intensity for unique genes
+        unique_g1 = v1[exclusive_1].mean(axis=1).rename(f"{df_to_use} mean intensity")
+        unique_g2 = v2[exclusive_2].mean(axis=1).rename(f"{df_to_use} mean intensity")
+        return {"MA_data": plot_data, "unique_g1": unique_g1, "unique_g2": unique_g2}
+
+    @validate_input
+    def plot_r_MA(self, dfs_to_use: Union[str, Iterable[str]], levels: Union[int, Iterable[int]],
+                       sample1: str = None, sample2: str = None, **kwargs):
+        """
+        | A mean-average plot illustrates the statistical inferences from a pairwise comparison of the two groups.
+        | The plot shows the log2 fold change between two different conditions against the log2 protein intensity 
+        averaged between the conditions. The p-value and adjusted p-value ((`Benjamini + Hochberg
+          <https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/p.adjust>`__) are determined using the R
+          limma package (`moderated t-statistic
+          <https://bioconductor.org/packages/release/bioc/vignettes/limma/inst/doc/usersguide.pdf>`__). Additionally,
+          calculations are corrected for the `intensity-variance relationship
+          <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-7-538#citeas>`__. For the calculation
+          of all these parameters :meth:`~mspypeline.BasePlotter.get_r_mean_average_data` is applied.
+        | Dashed lines indicate the fold change cutoff (default = log2(2) and p-value cutoff (default = p < 0.05) by
+          which proteins are considered significant (blue and red) or non significant (gray). Measured intensities of
+          unique proteins are indicated at the sides of the MA plot for each groups (light blue and orange).
+        | MA plots also permit the annotation of mapped proteins. This can be achieved by labeling a number of
+          the most significant proteins for each group or by selecting a
+          :ref:`pathway analysis protein list <pathway-proteins>`.
+        | For every pairwise comparison of the groups of the selected level two MA plots are created and saved,
+          using :func:`~mspypeline.plotting_backend.matplotlib_plots.save_MA_results', where one plot has a set of
+          proteins annotated and the other does not.
+
+        | To view adjustable parameters see "plot_r_MA_settings:" in the :ref:`Adjustable Options Configs
+          <default-yaml>`
+        | For overview of plots see :ref:`analysis options <statistic-plots>`
+        | For exemplary plot see :ref:`gallery <volcano>`
+
+        .. note::
+           * should be used with log2 intensities
+           * minimum of 3 samples per group required
+
+        .. note::
+            To determine which proteins can be compared between the two groups and which are unique for one group an
+            internal :ref:`threshold function <thresholding>` is applied.
+
+        Parameters
+        ----------
+        dfs_to_use
+            which dataframes/intensities should be plotted
+        levels
+            at which level of the data tree should the data be compared
+        sample1
+            first sample that should be compared (downregulated)
+        sample2
+            second sample that should be compared (upregulated)
+        kwargs
+            accepts kwargs
+        Returns
+        -------
+        List
+            A list of all created plots.
+        """
+        plots = []
+        plot_once = False
+        # get list of samples from configs
+        s1 = self.configs["plot_r_volcano_settings"].get("sample1_list")
+        s2 = self.configs["plot_r_volcano_settings"].get("sample2_list")
+        for level in levels:
+            for df_to_use in dfs_to_use:
+                if sample1 and sample2:
+                    level_keys = [sample1, sample2]
+                    plot_once = True
+                # if "default" was chosen: store all possible combinations in level_keys
+                elif "default" in s1:
+                    level_keys = self.all_tree_dict[df_to_use].level_keys_full_name[level]
+                    print(level_keys)
+                    level_keys = combinations(level_keys, 2)
+                # if sample1_list and sample2_list were specified: add these combinations to level_keys
+                else:
+                    level_keys = []
+                    for g1 in s1:
+                        for g2 in s2:
+                            if g1 != g2:
+                                level_keys.append([g1, g2])
+                for g1, g2 in level_keys:
+                    data = self.get_r_MA_data(g1, g2, df_to_use)
+                    if data:
+                        plot_kwargs = dict(g1=g1, g2=g2, save_path=self.file_dir_MA, df_to_use=df_to_use,
+                                           intensity_label=self.intensity_label_names[df_to_use],
+                                           interesting_proteins=self.interesting_proteins, split_files=True,
+                                           exp_has_techrep=self.experiment_has_techrep)
+                        plot_kwargs.update(**kwargs)
+                        plot = matplotlib_plots.save_MA_results(**data, **plot_kwargs)
+                        plots.append(plot)
+            if plot_once:
+                break
         return plots

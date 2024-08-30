@@ -102,6 +102,11 @@ plot_r_volcano_settings:
   sample1_list: default  # List of samples that should be analysed (left side/ down regulated)
   sample2_list: default  # List of samples that should be analysed (right side/ up regulated)
 
+plot_r_MA_settings:
+  create_plot: false
+  dfs_to_use: []
+  levels: []
+
 plot_r_timecourse_settings:
   create_plot: false
   dfs_to_use: []

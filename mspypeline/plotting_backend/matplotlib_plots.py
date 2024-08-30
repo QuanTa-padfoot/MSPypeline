@@ -2225,5 +2225,187 @@ def save_peptide_reports(
                 pdf.savefig(figure=fig)
                 plt.close(fig)
             
+@format_docstrings(kwargs=_get_path_and_name_kwargs_doc)
+@save_csvs({"unique_g1": "csv_significant/MA_plot_data_{g1}_vs_{g2}_unique_{g1}",
+            "unique_g2": "csv_significant/MA_plot_data_{g1}_vs_{g2}_unique_{g2}"})
+def save_MA_results(
+        MA_data: pd.DataFrame, interesting_proteins, unique_g1: pd.Series = None,
+        unique_g2: pd.Series = None, g1: str = "group1", g2: str = "group2", adj_pval: bool = False,
+        intensity_label: str = "Intensity", show_suptitle: bool = True, pval_threshold: float = 0.05,
+        fchange_threshold: float = 2, scatter_size: float = 20, n_labelled_proteins: int = 10, close_plots: str = "all",
+        exp_has_techrep: bool = False, **kwargs
+) -> Tuple[plt.Figure, Tuple[plt.Axes, plt.Axes, plt.Axes]]:
+    """
+    Saves multiple csv files and images containing the information of the volcano plot
 
+    Parameters
+    ----------
+    MA_data
+        DataFrame containing data for the MA plot with columns logFC and column specified under col. The index
+        should be protein names or gene names
+    interesting_proteins
+        mapping of pathways that shoul be annotated in the MA plot
+    unique_g1
+        Series containing intensities of proteins or genes unique to group one
+    unique_g2
+        Series containing intensities of proteins or genes unique to group two
+    g1
+        name of first sample that should be analysed (downregulated)
+    g2
+        name of second sample that should be analysed (upregulated)
+    adj_pval
+        should adjusted p values be used
+    intensity_label
+        from which intensities were the fold changes calculated
+    show_suptitle
+        should the figure title be shown
+    pval_threshold
+        maximum p value to be considered significant
+    fchange_threshold
+        minimum fold change threshold (before log2 transformation) to be labelled significant
+    scatter_size
+        size of the points in the scatter plots
+    n_labelled_proteins
+        number of points that will be annotated in th plot
+    close_plots
+        which plots should be closed when creating the plot, if None no plots will be closed
+    exp_has_techrep
+        whether technical replicates were aggregated for the plot
+    kwargs
+        {kwargs}
+
+    """
+    if close_plots is not None:
+        plt.close(close_plots)
+
+    col_mapping = {"adjpval": "adjusted p value", "pval": "unadjusted p value"}
+    if adj_pval:
+        col = "adjpval"
+    else:
+        col = "pval"
+
+    # given pathway mapping(s)/proteins of interest create a list later used to be annotated in the volcano plot
+    pathway_label = ""
+    POI_vals = []
+    if interesting_proteins.values():
+        all_pathway_proteins = set.union(*(set(x) for x in interesting_proteins.values()))
+        POI_vals = MA_data[MA_data.index.isin(list(all_pathway_proteins))]
+        pathway_label = "_".join(interesting_proteins.keys())
+
+    def get_MA_significances(fchange, pval, pval_threshold, fchange_threshold):
+        if pval > pval_threshold or abs(fchange) < np.log2(fchange_threshold):
+            return "ns"
+        elif fchange >= 0:
+            return "up"
+        elif fchange < 0:
+            return "down"
+        else:
+            raise ValueError(f"heisenbug: fold change: {fchange}, p value: {pval}")
+
+    g1_name = g1.replace("_", " ")
+    g2_name = g2.replace("_", " ")
+    # add the measured regulation to the data based on the given thresholds
+    MA_data["regulation"] = [get_MA_significances(log_fold_change, p_val, pval_threshold, fchange_threshold)
+                                  for log_fold_change, p_val in zip(MA_data["logFC"], MA_data[col])]
+    # save the MA data csv in full and only the significant part
+    save_path, csv_name = get_path_and_name_from_kwargs(
+        "csv_full/MA_plot_data_{g1}_vs_{g2}_full_{p}_{pathway_label}", g1=g1, g2=g2,
+        p=col_mapping[col].replace(' ', '_'), pathway_label=pathway_label, **kwargs)
+    save_csv_fn(save_path, csv_name, MA_data)
+    save_path, csv_name = get_path_and_name_from_kwargs(
+        "csv_significant/MA_plot_data_{g1}_vs_{g2}_significant_{p}_{pathway_label}", g1=g1, g2=g2,
+        p=col_mapping[col].replace(' ', '_'), pathway_label=pathway_label, **kwargs)
+    save_csv_fn(save_path, csv_name, MA_data[MA_data[col] < 0.05])
+    significance_to_color = {"down": "blue", "ns": "gray", "up": "red"}
+    significance_to_label = {"down": f"higher in  {g1_name}", "ns": "non-significant", "up": f"higher in  {g2_name}"}
+
+    # plot
+    fig = plt.figure(figsize=(7, 7))
+
+    gs = gridspec.GridSpec(1, 3, width_ratios=[1, 8, 1])
+    ax_unique_down: plt.Axes = plt.subplot(gs[0])
+    ax: plt.Axes = plt.subplot(gs[1])
+    ax_unique_up: plt.Axes = plt.subplot(gs[2])
+
+    # hide the spines between ax and ax2
+    ax_unique_down.spines['right'].set_visible(False)
+    ax_unique_up.spines['left'].set_visible(False)
+    ax_unique_down.yaxis.tick_left()
+    ax_unique_up.yaxis.tick_right()
+    ax_unique_up.yaxis.set_label_position("right")
+    # hide the xticks
+    ax_unique_down.tick_params(which='both', bottom=False, labelbottom=False)
+    ax_unique_up.tick_params(which='both', bottom=False, labelbottom=False)
+    # non sign gray, left side significant blue, right side red
+    for regulation in significance_to_color:
+        mask = [x == regulation for x in MA_data["regulation"]]
+        ax.scatter(MA_data["logFC"][mask], MA_data["AveExpr"][mask], s=scatter_size, edgecolors="none",
+                   color=significance_to_color[regulation], alpha=0.6,
+                   label=f"{sum(mask)} {significance_to_label[regulation]}")
+    # get axis bounds for vertical and horizontal lines
+    ymin, ymax = ax.get_ybound()
+    xmin, xmax = ax.get_xbound()
+    m = max(abs(xmin), xmax)
+    # center the plot around 0
+    ax.set_xlim(left=-1 * m, right=m)
+    # update the x bounds
+    xmin, xmax = ax.get_xbound()
+    axline_kwargs = dict(linestyle="--", color="black", alpha=0.5, linewidth=1)
+    # add lines for minimum fold change threshold
+    y_percentage = (-np.log10(0.05) + abs(ymin)) / (ymax + abs(ymin))
+    if fchange_threshold > 0:
+        ax.axvline(-np.log2(fchange_threshold), **axline_kwargs, ymin=y_percentage, ymax=1)
+        ax.axvline(np.log2(fchange_threshold), **axline_kwargs, ymin=y_percentage, ymax=1)
+    # plot unique values with mean intensity at over maximum
+    ax_unique_down.scatter([0] * len(unique_g1), unique_g1, s=scatter_size, color="dodgerblue", edgecolors="none",
+                           alpha=0.6, label=f"{len(unique_g1)} unique in  {g1_name}")
+    ax_unique_up.scatter([0] * len(unique_g2), unique_g2, s=scatter_size, color="coral", edgecolors="none",
+                         alpha=0.6, label=f"{len(unique_g2)} unique in  {g2_name}")
+    # adjust bounds for unique axis
+    ymin_down, ymax_down = ax_unique_down.get_ybound()
+    ymin_up, ymax_up = ax_unique_up.get_ybound()
+    ax_unique_down.set_ylim(bottom=min(ymin_down, ymin_up), top=max(ymax_down, ymax_up))
+    ax_unique_up.set_ylim(bottom=min(ymin_down, ymin_up), top=max(ymax_down, ymax_up))
+    # figure stuff
+    if show_suptitle:
+        fig.suptitle(f"{g1_name} vs {g2_name}" + (TECHREP_SUFFIX if exp_has_techrep else ""))
+    ax.set_xlabel(f"{intensity_label} Fold Change")
+    ax.set_ylabel(f" mean {intensity_label}")
+    ax_unique_down.set_ylabel(intensity_label)
+    ax_unique_up.set_ylabel(intensity_label)
+    fig.legend(bbox_to_anchor=(1.02, 0.5), loc="center left", frameon=False)
+    fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+
+    # save intermediate results
+    path, plot_name = get_path_and_name_from_kwargs(name="plots/MA_{g1}_{g2}_no_annotation_{p}_{pathway_label}",
+                                                    g1=g1, g2=g2, p=col_mapping[col].replace(' ', '_'),
+                                                    pathway_label=pathway_label, **kwargs)
+    save_plot_func(fig, path, plot_name, save_MA_results, **kwargs)
+    # add text labels to the most significantly regulated genes
+    significant_upregulated = MA_data[
+        (MA_data["logFC"] > np.log2(fchange_threshold)) & (MA_data[col] < 0.05)
+    ].sort_values(by=[col], ascending=True).head(n_labelled_proteins)
+    significant_downregulated = MA_data[
+        (MA_data["logFC"] < -np.log2(fchange_threshold)) & (MA_data[col] < 0.05)
+    ].sort_values(by=[col], ascending=True).head(n_labelled_proteins)
+    significant = pd.concat([significant_upregulated, significant_downregulated])
+    texts = []
+    # if list for proteins of interest (pathway list chosen) is given, annotate those proteins,
+    # otherwise annotate most significant proteins
+    if len(POI_vals) > 0:
+        for log_fold_change, ave_expr, gene_name in zip(POI_vals["logFC"], POI_vals["AveExpr"], POI_vals.index):
+            texts.append(ax.text(log_fold_change, ave_expr, gene_name, ha="center", va="center", fontsize=8,
+                                 color="black"))
+    else:
+        for log_fold_change, ave_expr, gene_name in zip(significant["logFC"], significant["AveExpr"], significant.index):
+            texts.append(ax.text(log_fold_change, ave_expr, gene_name, ha="center", va="center", fontsize=8,
+                                 color="black"))
+    adjust_text(texts, arrowprops=dict(width=0.15, headwidth=0, color='black'), ax=ax)
+    # save the final result
+    path, plot_name = get_path_and_name_from_kwargs(name="plots/MA_{g1}_{g2}_annotation_{p}_{pathway_label}",
+                                                    g1=g1, g2=g2, p=col_mapping[col].replace(' ', '_'),
+                                                    pathway_label=pathway_label, **kwargs)
+    save_plot_func(fig, path, plot_name, save_MA_results, **kwargs)
+    # TODO scatter plot of significant genes
+    return fig, (ax, ax_unique_down, ax_unique_up)
             
