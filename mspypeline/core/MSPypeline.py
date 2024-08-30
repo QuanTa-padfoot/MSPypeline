@@ -342,8 +342,12 @@ class MSPGUI(tk.Tk):
         self.plots_per_section +=1
         self.plot_row("Volcano plot (R)", "r_volcano",
                       "Which proteins are significantly higher or lower in intensity comparing two groups?\n Which proteins are detected only in one group and not in the other?", tab = tab3)
+        self.plots_per_section +=1
+        self.plot_row("Mean average (MA) plot (R)", "r_MA",
+                      "Which proteins are significantly higher or lower in intensity comparing two groups?\n What are the intensity, averaged between two groups, of these differentially regulated proteins?\n Which proteins are detected only in one group and not in the other?", tab = tab3)
+        
         # button for selecting samples to plot volcanoes
-        volcano_label = ttk.Label(tab3, text="Select samples for volcano plot:", font="Helvetica 10 bold")
+        volcano_label = ttk.Label(tab3, text="Select samples for volcano and MA plot:", font="Helvetica 10 bold")
         volcano_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
         self.customize_sample_button(plot_text="volcano", tab=tab3)        
         
