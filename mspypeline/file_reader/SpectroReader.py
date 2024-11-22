@@ -55,18 +55,16 @@ class SpectroReader(BaseReader):
                 file_dir = []
             for cur_separator in [",", "\t", ";"]:
                 try:
-                    df = pd.read_csv(file_dir, sep=cur_separator)
+                    df = pd.read_csv(file_dir, sep=cur_separator, nrows = 2)
                     if ('PG.ProteinGroups' in df.columns) and ('PG.Genes' in df.columns) and ('PG.ProteinDescriptions' in df.columns):
                         df = self.preprocess_df(df)
-                        print("SpectroReader opened file, yay :D")
+                        header = df.columns
+                        header = [element for element in header if ".Quantity" in element]
+                        formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(header)
+                        self.intensity_column_names = formatted_proteins_txt_columns
                         break
-                    else:
-                        print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
                 except:
                     print(f"Warning: SpectroReader cannot open file with ({cur_separator}) separator")
-            df = df.filter(regex=(".Quantity"))
-            formatted_proteins_txt_columns, self.analysis_design = self.format_spektrocols(df.columns)
-            self.intensity_column_names = formatted_proteins_txt_columns
         except FileNotFoundError:
             raise MissingFilesException("Could not find all ")
 
