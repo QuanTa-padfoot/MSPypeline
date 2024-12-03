@@ -133,35 +133,18 @@ class SpectroPlotter(BasePlotter):
         rename_dict = {all_quant_cols[i]: all_sample_name[i] for i in range(len(all_quant_cols))} 
         peptide_df.rename(columns=rename_dict, inplace= True)
         
-        # get the time point or dose at the second-to-last level, if applicable
-        n_level = len(all_sample_name[0].split("_"))
-        if time_level is None and n_level > 1:
-            timepoints = [s.split("_")[n_level-2] for s in all_sample_name]
-        elif n_level == 1:
-            timepoints = all_sample_name
-        else:
-            timepoints = [s.split("_")[time_level] for s in all_sample_name]
-        time_numerical = [re.sub("[^\d\.]", "",t) for t in timepoints]
+        sample_mapping = os.path.join(os.path.dirname(dir_peptide_data_folder), "config/sample_mapping.txt")
         try:
-            time_numerical = [float(x) for x in time_numerical]
-            def get_time_unit(x:str):
-                y = x.replace('.', '')
-                non_digit = re.sub(r'\d', '',y)
-                return(non_digit)
-            time_unit = [get_time_unit(x) for x in timepoints]
-            unique_time_unit = list(set(time_unit))
-            # If both min and h are present, convert the min to h in time_numerical
-            if unique_time_unit == ["min", "h"] or unique_time_unit == ["h", "min"]:
-                time_numerical[time_unit == "min"] = time_numerical[time_unit == "min"]/60
-                timepoints_dict = {all_sample_name[i]: timepoints[i] for i in range(len(all_sample_name))}
-                time_numerical_dict = {all_sample_name[i]: timepoints[i] for i in range(len(all_sample_name))}
-            # check if more than 1 unit is present, if so the timepoints and time_numerical are set to empty 
-            elif len(unique_time_unit) > 1:
-                timepoints_dict, time_numerical_dict = {}, {}
-                print("Warning: cannot identify the unit for time points/ dose. Some plotting options for peptide reports will not be available.")
-            else:
-                timepoints_dict = {all_sample_name[i]: timepoints[i] for i in range(len(all_sample_name))}
-                time_numerical_dict = {all_sample_name[i]: timepoints[i] for i in range(len(all_sample_name))}
-        except (ValueError):
-            timepoints_dict, time_numerical_dict = {}, {}
+            with open(sample_mapping, "r") as f:
+                next(f)  # skip the title line
+                for line in f.readlines():
+                    sample_name = line.split('\t')
+                    old_col = peptide_df.filter(regex=sample_name[0]).columns.to_list()
+                    rename_col_dict = {col: col.replace(sample_name[0], sample_name[1][:-1]) for col in old_col}
+                    peptide_df.rename(columns=rename_col_dict, inplace=True)
+                f.close()
+        except FileNotFoundError:
+            pass
+
+        timepoints_dict, time_numerical_dict = {}, {}
         return {"peptide_df": peptide_df,"timepoints_dict": timepoints_dict,"time_numerical_dict": time_numerical_dict}
