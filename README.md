@@ -73,15 +73,41 @@ conda activate mspypeline_dev
 python -m mspypeline --gui
 ```
 
-# Data analysis of Spectronaut files
-Currently accepted file formats are '.xls' and '.csv', though I'd recommend using the latter since it keeps the format of the data better. I'd suggest storing each file in a separate folder (i.e. 1 csv file per folder). The folder would later be used to store data analysis results, hence having several data files might cause confusion as to which file was used for the analysis. The csv file and folder's names do not affect data analysis, so you could name them in a way that is informative and convenient for you.
+# Guide for data analysis
+## Accepted data type
+MSPypeline supports the analysis of DDA or DIA proteomics data AFTER peptide/protein identification. It accepts DDA data from MaxQuant and DIA data from Spectronaut.
+
+For MaxQuant, all files to analyze need to be in a folder labeled 'txt'.
+
+For Spectronaut, currently accepted file formats are '.xls', '.csv', and '.tsv', though I'd recommend using csv or tsv since it keeps the format of the data better. I'd suggest storing each file in a separate folder (i.e. 1 csv file per folder). The folder would later be used to store data analysis results, hence having several data files might cause confusion as to which file was used for the analysis. The csv file and folder's names do not affect data analysis, so you could name them in a way that is informative and convenient for you.
 
 Data files often use commas as decimal points and/or thousand separators, both of which will be recognized and processed by MSPypeline. Thus, you do not need to manually convert them.
 
-Samples should be named as follow: ***Group_Biological Replicate_Technical Replicate***. I'd recommend not having comma, tab, and semi-colon in the names since MSPypeline might wrongly interpret them as separator (and therefore induce an error).
+Samples should be named as follow: ***Group_Biological Replicate_Technical Replicate***. I'd recommend not having comma, tab, and semi-colon in the names since MSPypeline might wrongly interpret them as separator (and therefore induce an error). Levels should be separated by the "_" sign, and more levels can be added depending on your experiment. All samples must have the same number of levels. 
+
+After selecting the directory to the data, select the type of reader depending on the data format: "mqreader" for MaxQuant output, and "SpectroReader" for Spectronaut output.
+
+Most analyses are supported for both data types, except for the MaxQuant report and the peptide analysis.
+
+## Reordering level
+Changing the order of the levels in sample names is sometimes desired (e.g. A_C_B instead of A_B_C). To this, click the ***Reorder level*** button and type the name of the first sample in the order you want. After pressing ***OK***, the level change will be applied to all other samples and a file named ***sample_mapping.txt*** will be generated in the config folder to record the old names (i.e. names as in the data file) and new names. Change the "Yaml file" to "default" and press ***Update*** with the correct reader. Double-check if the sample names have changed to your will in the ***sample names*** box.
+
+Please notice that columns in the data file itself will not be changed, only the sample names are changed after mspypeline read the file. 
+
+## MaxQuant report
+For quality control of the data, generated via the ***Create report*** button in the lower left corner of the GUI. Only available for MaxQuant data.
+
+## Peptide analysis
+Only available for Spectronaut data.
+
+The peptide data should be a .csv or .tsv file and stored in a folder named "peptide" in the data directory. Samples in the peptide data should have identical names as in the protein data. If you have made some changes in the sample names of the protein data file, please make similar changes to the peptide data.
+
+The peptide data file records precursor ions intensity. Peptide intensities are computed by summing intensities of precursors with the same sequence.
+
+For the peptide report, select the protein list(s) from the "Pathway analysis" section. A report will be generated per protein in the selected list and stored in the "peptide_report" folder. Internet connection is required since the protein sequence will be downloaded from UniProt using UniProt ID. A ***ConnectionError*** may occur if there is a proxy issue.
 
 # Bug reporting
-This repository is under development, hence errors are likely to occur. Should an error occur, please report it to me at either ***cong.ta@stud.uni-heidelberg.de*** or ***congquan.ta@dkfz-heidelberg.de***. In your email, please state:
+This repository is under development, hence errors are likely to occur. Should an error occur, please report it to me at ***congquan.ta@dkfz-heidelberg.de***. In your email, please state:
 - What the error is
 - A step-by-step procedure leading to the error
 - (If applicable) the data file with which you encountered the error
