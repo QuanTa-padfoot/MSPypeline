@@ -2214,37 +2214,29 @@ class BasePlotter:
         else:
             pass
         all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
-        # convert quantity columns ("all_sample_name") to float and replace "Filtered" with NaN
         protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].replace(',', '.', regex=True)
         protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].replace("Filtered", np.nan)
         protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].astype(float)
         # remove charge state from precursor strings
-        protein_peptide_data.loc[:,"EG.PrecursorId"] = [precursor.split("_")[1] for precursor in protein_peptide_data["EG.PrecursorId"]]
+        peptide_df = protein_peptide_data.groupby("PEP.StrippedSequence")[all_sample_name].sum().replace(0,np.nan)
         # make a dictionary to match precursors with peptides
-        precursor_peptide_match = {protein_peptide_data.loc[i,"EG.PrecursorId"]: protein_peptide_data.loc[i,"PEP.StrippedSequence"] for i in protein_peptide_data.index}
-        # sum over precursors with different charge states. Those with PTM are kept separate
-        peptide_df = pd.DataFrame(np.nan, index=protein_peptide_data["EG.PrecursorId"].unique(), columns=all_sample_name)
-        for precursor in peptide_df.index:
-            peptide_df.loc[precursor,all_sample_name] = protein_peptide_data.loc[protein_peptide_data["EG.PrecursorId"]==precursor,all_sample_name].sum(axis=0, min_count=1)
         peptide_df = peptide_df.transform(lambda x: np.log2(x))
         ##########################################################
         # prepare data to plot the sequence coverage
         ##########################################################
         uniprotID = protein_peptide_data.iloc[0, protein_peptide_data.columns.get_loc("PG.ProteinGroups")]
-        peptide_detection = peptide_df.copy()
-        peptide_detection = peptide_detection.notna().astype(int)
         # Make request to uniprot entry fasta file
         url=f"https://rest.uniprot.org/uniprotkb/{uniprotID}.fasta"
         r = requests.post(url) 
         fasta=''.join(r.text)
         sequence = "".join(fasta.split("\n")[1:])
-        peptide_sequence_in_protein = protein_peptide_data["PEP.StrippedSequence"].unique()
+        peptide_sequence_in_protein = peptide_df.index
         all_peptide_pos = {}
         for peptide_sequence in peptide_sequence_in_protein:
             start_pos = sequence.find(peptide_sequence)
             end_pos = start_pos + len(peptide_sequence) 
             if start_pos == -1:
-                continue
+                print(f"Warning: peptide [{peptide_sequence}] cannot be mapped to protein {gene} with uniprot ID {uniprotID}")
             else:
                 all_peptide_pos[peptide_sequence] = [start_pos, end_pos]
         # initiate a dataframe for plotting the heatmap
@@ -2255,12 +2247,11 @@ class BasePlotter:
         for condition in all_conditions:
             filter_col = self.all_tree_dict[df_to_use][condition].aggregate(None).columns
             for sample in filter_col:
-                detection_sample = [False for i in heatmap_dataset.columns]
-                for peptide in all_peptide_pos.keys():
-                    precursor = [k for k, v in precursor_peptide_match.items() if v == peptide]
-                    if peptide_detection.loc[precursor,sample].sum() > 0:
-                        start_pos, end_pos = all_peptide_pos[peptide]
-                        detection_sample[start_pos:end_pos] = [True] * (end_pos - start_pos)
+                detection_sample = [False] * len(sequence)
+                detected_peptide = peptide_df[peptide_df[sample].notna()].index.tolist()
+                for peptide in detected_peptide:
+                    start_pos, end_pos = all_peptide_pos[peptide]
+                    detection_sample[start_pos:end_pos] = [True] * (end_pos - start_pos)
                 heatmap_dataset.loc[condition,:] += detection_sample
                 percent_coverage_dict["sample"].append(sample)
                 percent_coverage_dict["percent_coverage"].append(sum(detection_sample)/len(detection_sample)*100)
@@ -2281,9 +2272,10 @@ class BasePlotter:
         ############################################################
         peptide_mean = peptide_df.mean(axis=1, skipna=True)
         peptide_ratio = peptide_df.sub(peptide_mean, axis=0)
+
         return {"uniprotID": uniprotID,  "n_peptide": peptide_df.shape[0], 
                 "peptide_coverage": heatmap_dataset, "percent_coverage_df": percent_coverage_df.sort_values("percent_coverage",ascending=False),
-                "peptide_abundance": peptide_df, "precursor_peptide_match": precursor_peptide_match,"all_peptide_pos":all_peptide_pos, "peptide_ratio": peptide_ratio}
+                "peptide_abundance": peptide_df,"all_peptide_pos":all_peptide_pos, "peptide_ratio": peptide_ratio}
 
     @add_end_docstrings(plot_para_return_docstring.format(
         ":func:`~mspypeline.plotting_backend.matplotlib_plots.save_peptide_report_results`"
