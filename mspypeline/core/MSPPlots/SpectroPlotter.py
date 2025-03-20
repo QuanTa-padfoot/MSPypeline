@@ -123,13 +123,14 @@ class SpectroPlotter(BasePlotter):
                     break
             except (ValueError):
                 pass
+        üeptide_df.columns = [col.replace(" ","") for col in peptide_df.columns]
         # remove "PG.IsSingleHit", ".EG.Quantity", and ".Qvalue" columns
         peptide_df.drop(peptide_df.filter(regex='PG.IsSingleHit|PG.Quantity|EG.Qvalue').columns, axis=1, inplace=True)
         # rename columns
         all_quant_cols = peptide_df.filter(regex="EG.TotalQuantity").columns.to_list()
         all_prefixes = [s.split(".EG")[0] for s in all_quant_cols]
         all_prefixes = [s.split(".raw")[0] for s in all_prefixes]
-        all_sample_name = [s.split("] ")[1] for s in all_prefixes]
+        all_sample_name = [s.split("]")[1] for s in all_prefixes]
         rename_dict = {all_quant_cols[i]: all_sample_name[i] for i in range(len(all_quant_cols))} 
         peptide_df.rename(columns=rename_dict, inplace= True)
         
