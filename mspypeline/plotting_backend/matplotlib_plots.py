@@ -2061,7 +2061,7 @@ def save_peptide_reports(
         gene: str, uniprotID: str="", n_peptide: int=None,
         peptide_coverage: pd.DataFrame=pd.DataFrame({}), percent_coverage_df: pd.DataFrame=pd.DataFrame({}),
         peptide_abundance: pd.DataFrame=pd.DataFrame({}), peptide_ratio: pd.DataFrame=pd.DataFrame({}),
-        precursor_peptide_match: dict={}, all_peptide_pos: dict={},save_path: str="", file_name: str="", level: int=None, close_plots: str = "all", 
+        all_peptide_pos: dict={},save_path: str="", file_name: str="", level: int=None, close_plots: str = "all", 
         exp_has_techrep: bool = False, **kwargs
 ):
     if close_plots is not None:
@@ -2082,6 +2082,7 @@ def save_peptide_reports(
         ######################################################
         fig, ax = plt.subplots(1,1,figsize=(10,6))
         if all_peptide_pos != {}:
+            from matplotlib.ticker import MaxNLocator
             length = [len(x) for x in all_peptide_pos.keys()]
             len_con = {x: length.count(x) for x in set(length)}
             l, h = len_con.keys(), len_con.values()
@@ -2090,11 +2091,8 @@ def save_peptide_reports(
             ax.set_title("Histogram of peptide length", fontsize = 26)
             ax.set_ylabel("count", fontsize = 16)
             ax.set_xlabel("Peptide length", fontsize=16)
-        if precursor_peptide_match != {} or not peptide_abundance.empty:
-            try: 
-                precursor = precursor_peptide_match.keys()
-            except:
-                precursor = peptide_abundance.index
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
 
         pdf.savefig(figure=fig)
         plt.close(fig)
@@ -2114,7 +2112,8 @@ def save_peptide_reports(
             hm = sns.heatmap(peptide_coverage, 
                 yticklabels = [item.replace("_", " ") for item in peptide_coverage.index],
                 cmap = sns.color_palette("rocket_r", n_colors=ncols),
-                cbar_kws = dict(orientation = 'horizontal', shrink = 0.5, pad = 0.2)
+                cbar_kws = dict(orientation = 'horizontal', shrink = 0.5, pad = 0.2),
+                vmin = 0, vmax= peptide_coverage.max().max()
                 )
             hm.set_xticks([i-1 for i in hm_tick_pos])
             hm.set_xticklabels(hm_tick_pos)
@@ -2161,22 +2160,19 @@ def save_peptide_reports(
             level_keys_labels = [key.replace("_", " ") for key in level_keys]
             n_rows, n_cols = get_number_rows_cols_for_fig(peptide_abundance.index)
             # sort peptides based on their starting point
-            precursor_order = pd.DataFrame({"peptide": peptide_abundance.index,
-                                            "start_position": [all_peptide_pos[precursor_peptide_match[p]][0] for p in peptide_abundance.index]
-            })
-            precursor_order.sort_values("start_position", ascending=True, inplace= True)
+            peptide_order = pd.DataFrame({"peptide": peptide, "start_position": pos[0]} for peptide, pos in all_peptide_pos.items())
+            peptide_order.sort_values("start_position", ascending=True, inplace= True)
             fig, axarr = plt.subplots(n_rows, n_cols, figsize=(n_cols * 5, int(n_rows * len(level_keys) / 1.1)))
             for i in range(n_rows * n_cols - len(peptide_abundance.index)):
                 axarr[n_rows - 1, n_cols - 1 - i].remove()
             fig.suptitle("Intensities of peptides (sum of intensities of precursors with different charges)" + (TECHREP_SUFFIX if exp_has_techrep else ""), size=26)
-            for precursor, (pos, ax) in zip(precursor_order["peptide"], np.ndenumerate(axarr)):
-                peptide = precursor_peptide_match[precursor]
+            for peptide, (pos, ax) in zip(peptide_order["peptide"], np.ndenumerate(axarr)):
                 start, end = all_peptide_pos[peptide]
-                ax.scatter(peptide_abundance.loc[precursor],
+                ax.scatter(peptide_abundance.loc[peptide],
                        [level_keys.index(c) for c in peptide_abundance.columns.get_level_values(0)],
                         #c=[result_color_map[c] for c in protein_intensities.columns.get_level_values(0)], edgecolors="none",
                        c="#ff6347", alpha=0.75)
-                ax.set_title(f"{precursor}\nposition {start}-{end}")
+                ax.set_title(f"{peptide}\nposition {start}-{end}")
                 ax.set_ylim((-1, len(level_keys)))
                 ax.set_yticks([i for i in range(len(level_keys))])
                 if len(level_keys_labels) == 0:
@@ -2195,8 +2191,8 @@ def save_peptide_reports(
             # sort peptides based on their starting point
             plot_data = peptide_ratio.copy()
             plot_data["_peptide"] = plot_data.index
-            plot_data["_start_pos"] = [all_peptide_pos[precursor_peptide_match[p]][0] for p in plot_data.index]
-            plot_data["_end_pos"] = [all_peptide_pos[precursor_peptide_match[p]][1] for p in plot_data.index]
+            plot_data["_start_pos"] = [all_peptide_pos[p][0] for p in plot_data.index]
+            plot_data["_end_pos"] = [all_peptide_pos[p][1] for p in plot_data.index]
             plot_data["_peptide"] = plot_data["_peptide"] + " [" + plot_data["_start_pos"].astype(str) + "-" + plot_data["_end_pos"].astype(str) + "]"
             max_peptide_length = max([len(peptide) for peptide in plot_data["_peptide"]])
             plot_data = pd.melt(plot_data, id_vars = ["_peptide", "_start_pos", "_end_pos"], col_level=0)
