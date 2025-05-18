@@ -1434,6 +1434,9 @@ class BasePlotter:
         # get data of the samples
         v1 = self.all_tree_dict[df_to_use][g1].aggregate(None)
         v2 = self.all_tree_dict[df_to_use][g2].aggregate(None)
+        if self.experiment_has_techrep:
+            v1.columns = [f"{g1}_rep{x}" for x in range(v1.shape[1])]
+            v2.columns = [f"{g2}_rep{x}" for x in range(v2.shape[1])]
         if v2.shape[1] < 2 or v2.shape[1] < 2:
             self.logger.warning("Skipping Volcano plot for comparison: %s, %s because the groups contain only "
                                 "%s and %s experiments", g1, g2, v1.shape[1], v2.shape[1])
