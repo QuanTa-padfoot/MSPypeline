@@ -205,21 +205,18 @@ class SpectroReader(BaseReader):
         Returns df after processing
         '''
         # process rows with multiple protein names
+        # process rows with multiple protein names
         dupl_row = [row for row in df.index if ";" in df.loc[row, "PG.ProteinGroups"]]
-        for row in dupl_row:
-            cell_genes = df.loc[row, 'PG.ProteinGroups'].split(';')
-            for i in range(len(cell_genes)):
-                new_row = []
-                for cell in df.loc[row, :]:
-                    if isinstance(cell, str):
-                        if ';' in cell:
-                            new_row.append(cell.split(';')[i])
-                        else:
-                            new_row.append(cell)
-                    else:
-                        new_row.append(cell)
-                df.loc[len(df.index)] = new_row
-        df = df.drop(labels=dupl_row, axis=0)
+        cols_to_clean = [c for c in df.columns 
+                 if c not in ["PG.Genes", "PG.ProteinGroups", "PG.ProteinDescriptions"]]
+        
+        def take_first_if_split(x):
+            if isinstance(x, str) and ";" in x:
+                return x.split(";", 1)[0]  # first value only
+            return x  # leave as-is (handles no ";" or non-strings)
+        
+        df.loc[dupl_row, cols_to_clean] = df.loc[dupl_row, cols_to_clean].applymap(take_first_if_split)
+        
         df["PG.Genes"] = df["PG.Genes"].fillna(df["PG.ProteinGroups"])
         df.index = range(len(df.index))
         
