@@ -2,21 +2,23 @@ import argparse
 import os
 import tkinter as tk
 import tkinter.ttk as ttk
-import tkinter.tix as tix
 from tkinter import filedialog
 import logging
 from threading import Thread
 from typing import Optional, Iterable
 import webbrowser
+import pandas as pd
 try:
     from ruamel_yaml import YAML
 except ModuleNotFoundError:
     from ruamel.yaml import YAML
-from mspypeline import create_app
+from mspypeline import create_app, path_package_config
 from mspypeline.core import MSPInitializer
 from mspypeline.helpers import get_logger
 from mspypeline.modules import default_normalizers
-from mspypeline.file_reader import BaseReader, MQReader
+# MQReader/SpectroReader imports are also needed for their side effect of registering themselves as
+# BaseReader.__subclasses__() before MSPGUI builds self.reader_options
+from mspypeline.file_reader import BaseReader, MQReader, SpectroReader
 
 
 class UIHandler:
@@ -27,7 +29,7 @@ class UIHandler:
       pipeline and creating all plots according to the configs or (not yet available) host the mspypeline on a flask
       server.
     """
-    def __init__(self, file_dir, yml_file=None, gui=False, host_flask=False, selected_reader=MQReader.MQReader,
+    def __init__(self, file_dir, yml_file=None, gui=False, host_flask=False, selected_reader=SpectroReader.SpectroReader,
                  loglevel=logging.DEBUG, configs: dict = None):
         """
         Parameters
@@ -96,19 +98,16 @@ class MSPGUI(tk.Tk):
         super().__init__()
         self.yaml_options = ["default"]
         self.reader_options = {reader.name: reader for reader in BaseReader.__subclasses__()}
-        self.selected_reader = MQReader.MQReader
+        self.selected_reader = SpectroReader.SpectroReader
         self.normalize_options = ["None"] + list(default_normalizers.keys())
-        self.mspinit = MSPInitializer(file_dir, yml_file, loglevel=loglevel)
         self.logger = get_logger(self.__class__.__name__, loglevel=loglevel)
-        #icon = tk.PhotoImage(file = (os.path.dirname(os.path.abspath(__file__)) + '/GUI/mspypeline_ico.png'))
-        #self.iconphoto(False, icon)
-
-        #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-light.tcl'))
-        #self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/forest-dark.tcl'))
+        try:
+            self.mspinit = MSPInitializer(file_dir, yml_file, loglevel=loglevel)
+        except (FileNotFoundError, ValueError, OSError) as e:
+            self.logger.warning("Could not initialize with dir '%s' / yml '%s' (%s), falling back to an empty dir",
+                                file_dir, yml_file, e)
+            self.mspinit = MSPInitializer(os.getcwd(), None, loglevel=loglevel)
         self.tk.call('source', (os.path.dirname(os.path.abspath(__file__)) + '/GUI/azure.tcl'))
-        
-        #style.theme_use('forest-light')
-        #style.theme_use('forest-dark')
         self.tk.call("set_theme", "light")
         style = ttk.Style()
         style.configure('my.TButton',font=('Helvetica', 12, 'bold'))
@@ -118,7 +117,7 @@ class MSPGUI(tk.Tk):
 
         self.plot_settings = {}
         self.intensity_options = ["lfq_log2", "raw_log2", "ibaq_log2"]
-        #,"lfq_normalized_log2", "raw_normalized_log2", "ibaq_normalized_log2]
+        self._default_configs = None  # lazily loaded/cached by _get_default_configs
 
         self.title("mspypeline")
 
@@ -128,9 +127,12 @@ class MSPGUI(tk.Tk):
 
         reader_label = ttk.Label(self, text="File reader", font="Helvetica 10 bold").grid(row=2, column=1, sticky=tk.W, padx = 5)
 
+        # cache the width used by several list-like widgets below instead of recomputing it 3 times
+        genelist_width = len(max(self.mspinit.list_full_genelists, key=len)) if self.mspinit.list_full_genelists else 20
+
         self.dir_text = tk.StringVar(value=file_dir)
         dir_button = ttk.Button(self, textvariable=self.dir_text,
-                                width=len(max(self.mspinit.list_full_gos, key=len)),
+                                width=genelist_width,
                                 command=lambda: browsefunc(filedialog.askdirectory, self.dir_text, fn_params={
                                    "title": "Please select a directory with result files"}))
         create_tool_tip(dir_button, "Select a directory to analyze")
@@ -142,8 +144,8 @@ class MSPGUI(tk.Tk):
                                             "\nFor re-analysis, load previously created Yaml file")
         self.yaml_button.grid(row=3, column=0, sticky=tk.W, padx=20)
 
-        self.reader_text = tk.StringVar(value="mqreader")
-        self.reader_button = ttk.OptionMenu(self, self.reader_text, list(self.reader_options.keys())[0], *self.reader_options.keys())
+        self.reader_text = tk.StringVar(value=self.selected_reader.name)
+        self.reader_button = ttk.OptionMenu(self, self.reader_text, self.selected_reader.name, *self.reader_options.keys())
         self.reader_button.grid(row=3, column=1, sticky=tk.W, padx=20)
 
         self.replicate_var = tk.IntVar(value=1)
@@ -153,51 +155,30 @@ class MSPGUI(tk.Tk):
         create_tool_tip(replicate_button, "If selected, the samples of the last level are averaged")
         
 
-        go_proteins_label = ttk.Label(self, text="Go analysis lists")
-        create_tool_tip(go_proteins_label, "For a full list of Proteins see the Documentation."
-                                           "\nCustom Gene Lists -> GO Terms")
-        go_proteins_label.grid(row=5, column=0, sticky=tk.W, padx=5)
-        # Button for submitting customized GO gene lists
-        GO_button = ttk.Button(self, text='Upload file', width=10,
-                               command=lambda: self.upload_file(list_type='GO'))
-        create_tool_tip(GO_button, "Upload your GO gene list")
-        GO_button.grid(row=5, column=1, sticky=tk.W)
-
-        pathways_label = ttk.Label(self, text="Pathway analysis lists")
-        create_tool_tip(pathways_label, "For a full list of Proteins see the Documentation."
-                                           "\nCustom Gene Lists -> Pathways")
-        pathways_label.grid(row=7, column=0, sticky=tk.W, padx=5)
-        # Button for submitting customized pathway gene lists
-        pathways_button = ttk.Button(self, text='Upload file',width=10,
-                                command=lambda: self.upload_file(list_type='pathways'))
-        create_tool_tip(pathways_button, "Upload your pathways gene list")
-        pathways_button.grid(row=7, column=1, sticky=tk.W)
+        genelist_label = ttk.Label(self, text="Gene lists (GO terms & pathways)")
+        create_tool_tip(genelist_label, "For a full list of available gene sets see the Documentation."
+                                        "\nCustom Gene Lists")
+        genelist_label.grid(row=5, column=0, sticky=tk.W, padx=5)
+        # Button for submitting a customized gene list (used by both GO and pathway analyses)
+        genelist_upload_button = ttk.Button(self, text='Upload file', width=10,
+                               command=lambda: self.upload_file())
+        create_tool_tip(genelist_upload_button, "Upload your gene list")
+        genelist_upload_button.grid(row=5, column=1, sticky=tk.W)
 
         design_label = ttk.Label(self, text="Sample names")
         create_tool_tip(design_label, "Inferred sample names of the experiment")
         design_label.grid(row=9, column=0, sticky=tk.W, padx=5)
 
-        self.go_term_list = tk.Listbox(self, selectmode="multiple", height=5,
-                                       width=len(max(self.mspinit.list_full_gos, key=len)))
-        self.go_term_list.configure(exportselection=False)
-        for x in self.mspinit.list_full_gos:
-            self.go_term_list.insert("end", x)
+        self.gene_list_box = tk.Listbox(self, selectmode="multiple", height=10,
+                                       width=genelist_width)
+        self.gene_list_box.configure(exportselection=False)
+        for x in self.mspinit.list_full_genelists:
+            self.gene_list_box.insert("end", x)
 
-        self.go_term_list.grid(row=6, column=0, columnspan=3,sticky=tk.W, padx=20)
-        scrollbar_go = tk.Scrollbar(self,orient='vertical', command=self.go_term_list.yview)
-        scrollbar_go.grid(row=6, column=2, sticky='nes', padx=20)
-        self.go_term_list.config(yscrollcommand=scrollbar_go.set)
-
-        self.pathway_list = tk.Listbox(self, selectmode="multiple", height=5,
-                                       width=len(max(self.mspinit.list_full_gos, key=len)))
-        self.pathway_list.configure(exportselection=False)
-        for x in self.mspinit.list_full_pathways:
-            self.pathway_list.insert("end", x)
-        
-        self.pathway_list.grid(row=8, column=0, columnspan=3, sticky=tk.W, padx=20)
-        scrollbar_pathway = tk.Scrollbar(self,orient='vertical', command=self.pathway_list.yview)
-        scrollbar_pathway.grid(row=8, column=2, sticky='nes', padx=20)
-        self.pathway_list.config(yscrollcommand=scrollbar_pathway.set)
+        self.gene_list_box.grid(row=6, column=0, rowspan=2, columnspan=3, sticky=tk.W, padx=20)
+        scrollbar_genelist = tk.Scrollbar(self, orient='vertical', command=self.gene_list_box.yview)
+        scrollbar_genelist.grid(row=6, column=2, rowspan=2, sticky='nes', padx=20)
+        self.gene_list_box.config(yscrollcommand=scrollbar_genelist.set)
 
         self.experiments_list = tk.Listbox(self, height=5, width=30)
         self.experiments_list.grid(row=10, column=0, columnspan=2, sticky=tk.W, padx=20)
@@ -210,12 +191,6 @@ class MSPGUI(tk.Tk):
         report_button.grid(row=11, column=0, padx=20, pady=20)
         create_tool_tip(report_button, "MaxQuant report for quality control")
 
-        #plot_label = ttk.Label(self, text="Plot selection", font='Helvetica 10 bold').grid(row=14, column=0, sticky = tk.W)
-
-        #intensity_label = ttk.Label(self, text="Intensities").grid(row=7, column=1)
-
-        #levels_label = ttk.Label(self, text="Levels").grid(row=7, column=2)
-        
         # Button to reorder the level
         reorder_level_button = ttk.Button(self, text="Reorder level", command=lambda:self.reorder_level())
         reorder_level_button.grid(row=9, column=2, sticky=tk.W, padx=20)
@@ -240,9 +215,6 @@ class MSPGUI(tk.Tk):
                                 lambda _: webbrowser.open_new("https://mspypeline.readthedocs.io/en/latest/"))
         documentation_link.grid(row=11, column=2)
 
-        #self.running_text = tk.StringVar(value="Please press Start")
-        #self.running_label = ttk.Label(self, textvariable=self.running_text).grid(row=12, column=3, sticky=tk.NE, padx=30)
-
         style_switch = ttk.Checkbutton(self, text='Dark theme', style='Switch.TCheckbutton', command=lambda: self.style_handler())
         style_switch.grid(row=12, column=0)
 
@@ -263,10 +235,6 @@ class MSPGUI(tk.Tk):
         ##Section Normalization
 
         self.plots_per_section = 0
-        
-        #ttk.Label(tab1, text="Normalization plots", font="Helvetica 10 bold").grid(
-        #    row=self.heading_length + self.number_of_plots, column=0, sticky=tk.W, padx=5)
-        #self.number_of_plots += 1
         norm_method_label = ttk.Label(tab1, text="Choose a Normalization Method:", font="Helvetica 10 bold")
         norm_method_label.grid(row=self.heading_length + self.number_of_plots+3, column=0, pady=20)
         create_tool_tip(norm_method_label, "For more information about normalization visit the documentation.\n"
@@ -291,9 +259,6 @@ class MSPGUI(tk.Tk):
 
         ##Section Outlier detection
         self.plots_per_section = 0
-        #ttk.Label(tab2, text="Outlier detection / Comparisons", font="Helvetica 10 bold").grid(
-        #    row=self.heading_length + self.number_of_plots, column=0, sticky=tk.W, padx=5)
-        #self.number_of_plots += 1
         self.plot_row("Detection counts", "detection_counts",
                       "How many proteins were detected how frequently in the samples of a group?", tab = tab2)
         self.plots_per_section +=1
@@ -325,17 +290,12 @@ class MSPGUI(tk.Tk):
                       "Where do my proteins of interest rank in intensity compared to all other proteins?", tab = tab2)
 
         ##Section Statistical Inference
-        
-        #ttk.Label(tab3, text="Statistical inference", font="Helvetica 10 bold").grid(
-        #    row=self.heading_length + self.number_of_plots, column=0, sticky=tk.W, padx=5)
-        #self.number_of_plots += 1
         self.plots_per_section = 0
         self.plot_row("Pathway Analysis", "pathway_analysis",
                       "What is the intensity of my proteins of interest, and is it significantly different in one group versus the other?", tab = tab3)
         self.plots_per_section +=1
         self.plot_row("Heatmap Pathway", "heatmap_pathway",
                       "What is the intensity of my proteins of interest?", tab = tab3)
-        #self.plot_row("Pathway Timecourse", "pathway_timecourse")
         self.plots_per_section +=1
         self.plot_row("Go analysis", "go_analysis",
                       "Are the proteins of a group enriched for the selected GO terms?", tab = tab3)
@@ -359,9 +319,6 @@ class MSPGUI(tk.Tk):
         norm_method_label = ttk.Label(tab3, text="Settings for plotting timecourse:", font="Helvetica 10 bold")
         norm_method_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
         self.customize_sample_button(plot_text="timecourse", tab=tab3)
-        #total_length = self.heading_length + self.number_of_plots
-        #total_length = self.heading_length + self.number_of_plots
-        
         self.plots_per_section +=1
         self.plot_row("Peptide report", "peptide_report",
                       "Detailed report of each protein in selected pathway(s) based on peptide data\n Requires a .csv file containing data on the peptide level in a folder named `peptide`\n Internet is needed to download protein information from Uniprot.",
@@ -382,39 +339,28 @@ class MSPGUI(tk.Tk):
         self.update_yaml_options()
         self.resizable(False, False) 
 
-    def upload_file(self, list_type: str):
-        '''To upload custom gene list for GO and pathways analysis'''
+    def upload_file(self):
+        '''To upload a custom gene list, usable by both GO and pathway analyses'''
         filenames = filedialog.askopenfilenames(initialdir=self.dir_text,filetypes=[('Text Files', '*.txt')])
-        targetPath = os.path.realpath(__file__)
-        targetPath = targetPath.split(sep='mspypeline\core')[0]
-        if list_type == 'GO':
-            targetPath = targetPath + 'mspypeline\config\go_terms'
-        elif list_type == 'pathways':
-            targetPath = targetPath + 'mspypeline\config\pathways'
+        target_dir = os.path.join(path_package_config, MSPInitializer.genelist_path)
         for filedir in filenames:
             if filedir is not None:
-                filename = filedir.replace('\\', '/')
-                filename_nodir = filename.split('/')
-                filename_nodir = filename_nodir[len(filename_nodir) - 1]
-                target_filedir = os.path.join(targetPath, filename_nodir)
-                target_filedir = target_filedir.replace('\\', '/')
+                filename_nodir = os.path.basename(filedir)
+                target_filedir = os.path.join(target_dir, filename_nodir)
 
                 # Create a list of gene names, remove duplicates and sort the list
                 gene_list = []
-                for line in open(filename, 'r').readlines():
-                    if line not in gene_list and line != '\n':
-                        gene_list.append(line)
+                with open(filedir, 'r') as source:
+                    for line in source.readlines():
+                        if line not in gene_list and line != '\n':
+                            gene_list.append(line)
 
                 # Write gene_list to the new file
                 with open(target_filedir, 'w') as target:
                     for line in gene_list:
                         target.write(line)
-                if list_type == 'GO':
-                    self.mspinit.list_full_gos.append(filename_nodir)
-                    self.go_term_list.insert("end", filename_nodir)
-                elif list_type == 'pathways':
-                    self.mspinit.list_full_pathways.append(filename_nodir)
-                    self.pathway_list.insert("end", filename_nodir)
+                self.mspinit.list_full_genelists.append(filename_nodir)
+                self.gene_list_box.insert("end", filename_nodir)
     
     def style_handler(self):
         if self.tk.call("ttk::style", "theme", "use") == "azure-dark":
@@ -451,44 +397,35 @@ class MSPGUI(tk.Tk):
         for op in self.yaml_options:
             self.yaml_button["menu"].add_command(label=op, command=tk._setit(self.yaml_text, op))
 
+    def _read_sample_mapping(self, column: int = 1):
+        '''Read sample names from config/sample_mapping.txt (column 0 = original name, column 1 = new name).
+        Falls back to the selected reader's "all_replicates" config if the file does not exist.'''
+        mapping_txt = os.path.join(self.mspinit.start_dir, "config", "sample_mapping.txt")
+        try:
+            mapping = pd.read_csv(mapping_txt, sep="\t", header=0)
+        except FileNotFoundError:
+            return list(self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", []))
+        return mapping.iloc[:, column].astype(str).tolist()
+
     def update_listboxes(self):
         # delete all experiments then add from file (try sample_mapping.txt first, if sample_mapping is not present then add from config)
         self.experiments_list.delete(0, "end")
-        mapping_txt = os.path.join(self.mspinit.start_dir,"config/sample_mapping.txt")
-        try:
-            with open(mapping_txt, "r") as f:
-                next(f)
-                for line in f.readlines():
-                    op = line.split('\t')[1]
-                    op = op[:-1]
-                    self.experiments_list.insert("end", op)
-                f.close()
-        except FileNotFoundError:
-            for op in self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", []):
-                self.experiments_list.insert("end", op)
+        for op in self._read_sample_mapping(column=1):
+            self.experiments_list.insert("end", op)
         # clear selection then select from configs
-        for i, pathway in enumerate(self.mspinit.list_full_pathways):
-            self.pathway_list.select_clear(i)
-        if self.mspinit.configs.get("pathways"):
-            for pathway in self.mspinit.configs.get("pathways"):
+        for i, genelist in enumerate(self.mspinit.list_full_genelists):
+            self.gene_list_box.select_clear(i)
+        if self.mspinit.configs.get("gene_lists"):
+            for genelist in self.mspinit.configs.get("gene_lists"):
                 try:
-                    self.pathway_list.select_set(self.mspinit.list_full_pathways.index(pathway))
+                    self.gene_list_box.select_set(self.mspinit.list_full_genelists.index(genelist))
                 except ValueError:
-                    self.logger.warning("Selected pathway file %s not found", pathway)
-        # clear selection then select from configs
-        for i, go in enumerate(self.mspinit.list_full_gos):
-            self.go_term_list.select_clear(i)
-        if self.mspinit.configs.get("go_terms"):
-            for go in self.mspinit.configs.get("go_terms"):
-                try:
-                    self.go_term_list.select_set(self.mspinit.list_full_gos.index(go))
-                except ValueError:
-                    self.logger.warning("Selected go term file %s not found", go)
+                    self.logger.warning("Selected gene list file %s not found", genelist)
 
     def yaml_path_setter(self, *args):
         self.mspinit.file_path_yaml = self.yaml_text.get()
         # get the reader class by the saved name
-        self.selected_reader = self.reader_options.get(self.mspinit.configs.get("selected_reader", "mqreader"))
+        self.selected_reader = self.reader_options.get(self.mspinit.configs.get("selected_reader", "spectroReader"))
         reader_settings = self.mspinit.configs.get(self.selected_reader.name, {})
         self.reader_text.set(self.selected_reader.name)
         level_names = reader_settings.get("level_names", [])
@@ -519,13 +456,19 @@ class MSPGUI(tk.Tk):
     def reader_setter(self, *args):
         self.selected_reader = self.reader_options[self.reader_text.get()]
 
+    def _get_default_configs(self):
+        # the default yaml never changes at runtime, so only load/parse it from disk once
+        if self._default_configs is None:
+            yamlReader = YAML()
+            with open(self.mspinit.get_default_yml_path()) as f:
+                self._default_configs = yamlReader.load(f)
+        return self._default_configs
+
     def update_button(self):
         self.mspinit.configs["has_techrep"] = bool(self.replicate_var.get())
         self.mspinit.configs["selected_reader"] = str(self.reader_text.get())
         self.mspinit.configs["selected_normalizer"] = str(self.normalizer_text.get())
-        yamlReader = YAML()
-        with open(self.mspinit.get_default_yml_path()) as f:
-            defaultConfigs = yamlReader.load(f)
+        defaultConfigs = self._get_default_configs()
         reader_settings = self.mspinit.configs.get(self.selected_reader.name, {})
         level_names = reader_settings.get("level_names", [])
         level_names = {name: i for i, name in enumerate(level_names)}
@@ -545,18 +488,13 @@ class MSPGUI(tk.Tk):
             selected_settings.update(additional_settings)
             for k, v in selected_settings.items():
                 self.mspinit.configs[plot_settings][k] = v
-        gos = self.go_term_list.curselection()
-        gos = [self.mspinit.list_full_gos[int(go)] for go in gos]
-        pathways = self.pathway_list.curselection()
-        pathways = [self.mspinit.list_full_pathways[int(pathway)] for pathway in pathways]
+        genelists = self.gene_list_box.curselection()
+        genelists = [self.mspinit.list_full_genelists[int(i)] for i in genelists]
         self.mspinit.configs["plot_r_volcano_settings"]["adj_pval"] = bool(self.p_val_var.get())
         self.mspinit.configs["export_data"] = bool(self.if_export_data.get())
-        if not gos:
-            gos = defaultConfigs["go_terms"]
-        self.mspinit.configs["go_terms"] = gos
-        if not pathways:
-            pathways = defaultConfigs["pathways"]
-        self.mspinit.configs["pathways"] = pathways
+        if not genelists:
+            genelists = defaultConfigs["gene_lists"]
+        self.mspinit.configs["gene_lists"] = genelists
         self.mspinit.init_config()
         self.mspinit.read_data()
         self.update_listboxes()
@@ -569,7 +507,6 @@ class MSPGUI(tk.Tk):
         y = self.winfo_y() + self.winfo_height()//2 - self.warningbox.winfo_height()//2
         self.warningbox.geometry(f"+{x}+{y}")
         self.start_mspypeline_thread(None)
-        #self.running_text.set("Please press Start")
 
     def start_ops(self):
         try:
@@ -584,22 +521,19 @@ class MSPGUI(tk.Tk):
             self.err = None
     
     def start_mspypeline_thread(self, event):
-        global start_thread
-        start_thread = Thread(target=self.start_ops)
+        self.start_thread = Thread(target=self.start_ops)
         self.warningbox.progressbar.start()
-        start_thread.daemon = True
-        start_thread.start()
-        self.after(20, self.check_mspypeline_thread)
-    
+        self.start_thread.daemon = True
+        self.start_thread.start()
+        self.after(100, self.check_mspypeline_thread)
+
     def check_mspypeline_thread(self):
-        if start_thread.is_alive():
-            self.after(20, self.check_mspypeline_thread)
+        if self.start_thread.is_alive():
+            self.after(100, self.check_mspypeline_thread)
         elif self.err == None:
             self.popup_window('Status Update', 'Tasks completed')
-            #self.warningbox.updateInfo('Status Update', 'Tasks completed')
         elif self.err == KeyError:
             self.popup_window(title='Status Update', message=('File could not be read with selected reader\nIf this is your first use after updating MSPypeline, please delete the config folder and try again\nError code: ' + self.err.__name__), error=True)
-            #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
         ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         elif self.err == NotImplementedError:
             self.popup_window(title='Status Update', message=('A requested task is currently not implemented\nError code: ' + self.err.__name__), error = True)
@@ -609,10 +543,8 @@ class MSPGUI(tk.Tk):
             self.popup_window(title='Status Update', message=('Result file(s) are currently open and cannot be modified\nPlease close those file(s) and try again :D\nError code: ' + self.err.__name__), error=True)
         else:
             self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
-            #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
-    
+
     def report_button(self):
-        #self.running_text.set("Please press Start")
         self.warningbox = WarningBox('Status Update', 'Creating Report')
         self.warningbox.wait_visibility()
         x = self.winfo_x() + self.winfo_width()//2 - self.warningbox.winfo_width()//2
@@ -633,27 +565,23 @@ class MSPGUI(tk.Tk):
             self.err = None
 
     def report_mspypeline_thread(self, event):
-        global report_thread
-        report_thread = Thread(target=self.report_ops)
-        report_thread.daemon = True
+        self.report_thread = Thread(target=self.report_ops)
+        self.report_thread.daemon = True
         self.warningbox.progressbar.start()
-        report_thread.start()
-        self.after(20, self.check_report_thread)
-    
+        self.report_thread.start()
+        self.after(100, self.check_report_thread)
+
     def check_report_thread(self):
-        if report_thread.is_alive():
-            self.after(20, self.check_report_thread)
+        if self.report_thread.is_alive():
+            self.after(100, self.check_report_thread)
         elif self.err == None:
             self.popup_window('Status Update', 'Report completed')
-            #self.warningbox.updateInfo('Status Update', 'Tasks completed')
         elif self.err == KeyError:
             self.popup_window(title='Status Update', message=('File could not be read with selected reader\nError code: ' + self.err.__name__), error=True)
-            #self.warningbox.updateInfo('Status Update', 'File could not be read with selected reader')
         ### ADD HERE ERROR TYPES FOR PROMPT DISPLAY ###
         else:
             self.popup_window(title='Status Update', message=('An error occurred, please check Terminal\nError code: ' + self.err.__name__), error=True)
-            #self.warningbox.updateInfo('Status Update', 'An error occured, please check Terminal')
-        
+
     def popup_window(self, title='', message='', error=False):
         self.warningbox.progressbar.stop()
         self.warningbox.destroy()
@@ -730,16 +658,7 @@ class MSPGUI(tk.Tk):
             note1.grid(row=1, column=0)
         else:
             selected_level = selected_level[0]
-            try:
-                all_replicates = []
-                with open(os.path.join(self.mspinit.start_dir,"config/sample_mapping.txt"), 'r') as f:
-                    next(f)
-                    for line in f.readlines():
-                        sample = line.split('\t')[1]
-                        all_replicates.append(sample[:-1])
-                    f.close()
-            except FileNotFoundError:
-                all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+            all_replicates = self._read_sample_mapping(column=1)
             max_level = len(all_replicates[0].split("_")) - 1
             all_sample = ["default"]
             if max_level == selected_level:
@@ -837,8 +756,7 @@ class MSPGUI(tk.Tk):
                 okButton = tk.Button(window, text="OK",
                                  command=lambda: update_volcano_settings())
                 okButton.grid(row=2, column=3, padx=5, sticky=tk.W)
-        window.mainloop()
-            
+
     def customize_timecourse(self):
         '''Popup window to select samples for plotting the timecourse.
         Selected settings are passed to configs, which are then picked up by BasePlotter to make plots.'''
@@ -846,16 +764,7 @@ class MSPGUI(tk.Tk):
         window.geometry("500x400")
         window.title("Selecting samples for plotting timecourse Fold Change")
         # get sample names from sample_mapping.txt; if not present then take it from config
-        try:
-            all_replicates = []
-            with open(os.path.join(self.mspinit.start_dir, "config/sample_mapping.txt"), 'r') as f:
-                next(f)
-                for line in f.readlines():
-                    sample = line.split('\t')[1]
-                    all_replicates.append(sample[:-1])
-                f.close()
-        except FileNotFoundError:
-            all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+        all_replicates = self._read_sample_mapping(column=1)
 
         # Remove the last two levels in sample display
         all_sample = []
@@ -954,8 +863,6 @@ class MSPGUI(tk.Tk):
                                 command= lambda: update_timecourse_settings())
             okButton.grid(row=7, column=1, padx=5, sticky=tk.W)
 
-        window.mainloop()
-        
     def plot_row(self, text: str, plot_name: str, plot_tool_tip: str = None, tab = None):
         row = self.heading_length + self.number_of_plots
         col = 0
@@ -1003,13 +910,7 @@ class MSPGUI(tk.Tk):
         window.title("Reordering level")
         mapping_txt = os.path.join(self.mspinit.start_dir,"config/sample_mapping.txt")
 
-        try:
-            with open(mapping_txt, "r") as f:
-                next(f)
-                original_name_example = f.readline().split('\t')[0]
-                f.close()
-        except FileNotFoundError:
-            original_name_example = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])[0]
+        original_name_example = self._read_sample_mapping(column=0)[0]
         original_level_dict = {}
         n = 0
         for element in original_name_example.split('_'):
@@ -1042,15 +943,7 @@ class MSPGUI(tk.Tk):
             try:
                 for element in new_name_example:
                     new_level_order.append(original_level_dict[element])
-                try:
-                    with open(mapping_txt, 'r') as f:
-                        all_replicates = []
-                        next(f)
-                        for line in f.readlines():
-                            all_replicates.append(line.split('\t')[0])
-                        f.close()
-                except FileNotFoundError:
-                    all_replicates = self.mspinit.configs.get(self.selected_reader.name, {}).get("all_replicates", [])
+                all_replicates = self._read_sample_mapping(column=0)
                 with open(mapping_txt, 'w') as f:
                     f.write('Name as in data file\tNew name\n')
                     for name in all_replicates:
@@ -1071,7 +964,6 @@ class MSPGUI(tk.Tk):
         confirm_button.grid(row=5, column=0)
 
         window.geometry("500x300")
-        window.mainloop()
 
 class WarningBox(tk.Toplevel):
     def __init__(self, title='', message=''):

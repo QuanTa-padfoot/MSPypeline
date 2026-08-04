@@ -29,13 +29,13 @@ the :class:`~MSPInitializer` class which creates and reads in the :ref:`configur
     # load the data that is provided in a submodule
     init = load_example_dataset(configs={
         "has_techrep": True,
-        "pathways": ["BIOCARTA_EGF_PATHWAY.txt", "HALLMARK_IL2_STAT5_SIGNALING.txt"],
-        "go_terms": ["GO_APOPTOTIC_SIGNALING_PATHWAY.txt", "GO_INFLAMMATORY_RESPONSE.txt"]
+        "gene_lists": ["BIOCARTA_EGF_PATHWAY.txt", "HALLMARK_IL2_STAT5_SIGNALING.txt",
+                       "GO_APOPTOTIC_SIGNALING_PATHWAY.txt", "GO_INFLAMMATORY_RESPONSE.txt"]
         })
     plotter = MaxQuantPlotter.from_MSPInitializer(init)
 
     # create a second plotter without collapsed technical replicates
-    init = load_example_dataset(configs={"has_techrep": False, "pathways":[]})
+    init = load_example_dataset(configs={"has_techrep": False, "gene_lists":[]})
     plotter_with_tech_reps = MaxQuantPlotter.from_MSPInitializer(init)
 
 define some helper functions and configurations

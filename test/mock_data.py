@@ -8,8 +8,7 @@ class MockData:
     test_dir = os.path.dirname(os.path.realpath(__file__))
     script_loc = os.path.split(test_dir)[0]
     config_dir = os.path.join(script_loc, "mspypeline", "config")
-    go_dir = os.path.join(config_dir, "go_terms")
-    pathway_dir = os.path.join(config_dir, "pathways")
+    gene_lists_dir = os.path.join(config_dir, "gene_lists")
     mock_data_dir = os.path.join(test_dir, "mock_data")
 
     @staticmethod
@@ -37,8 +36,8 @@ class MockData:
 
         # accumulate all genes
         pathway_genes = {}
-        for file_name in os.listdir(MockData.pathway_dir):
-            file = os.path.join(MockData.pathway_dir, file_name)
+        for file_name in os.listdir(MockData.gene_lists_dir):
+            file = os.path.join(MockData.gene_lists_dir, file_name)
             with open(file) as f:
                 pathway = f.readline().strip()
                 pathway_genes[pathway] = []
