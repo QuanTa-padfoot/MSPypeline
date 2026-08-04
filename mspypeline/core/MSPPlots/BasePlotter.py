@@ -1575,20 +1575,12 @@ class BasePlotter:
         else:
             normalizer = self.configs.get("selected_normalizer")
             plot_title += f"_{normalizer}_{df_to_use}"
-        genelist = []
-        genelistPath = os.path.realpath(__file__)
-        genelistPath = genelistPath.split(sep='mspypeline\core')[0]
+        # gene lists are already loaded in memory (self.go_analysis_gene_names / self.interesting_proteins),
+        # so no need to re-read the file from disk here
         if genelist_type == 'GO':
-            genelistPath = genelistPath + 'mspypeline\config\go_terms'
-        elif genelist_type == 'pathways':
-            genelistPath = genelistPath + 'mspypeline\config\pathways'
-        if genelist_name.endswith(".txt"):
-            genelistPath = genelistPath + f'\{genelist_name}'
+            genelist = self.go_analysis_gene_names[genelist_name]
         else:
-            genelistPath = genelistPath + f'\{genelist_name}.txt'
-        with open(genelistPath, 'r') as file:
-            for gene in file:
-                genelist.append(gene.replace("\n", ""))
+            genelist = self.interesting_proteins[genelist_name]
         return plot_title, genelist
 
     @validate_input

@@ -23,12 +23,9 @@ class MSPInitializer:
     yml_file_name_tmp = "config_tmp.yml"
     yml_file_name = "config.yml"
     default_yml_name = "ms_analysis_default.yml"
-    go_path = "go_terms"
-    pathway_path = "pathways"
-    possible_gos = sorted([x for x in os.listdir(os.path.join(path_package_config, go_path))
-                           if x.endswith(".txt")])
-    possible_pathways = sorted([x for x in os.listdir(os.path.join(path_package_config, pathway_path))
-                                if x.endswith(".txt")])
+    genelist_path = "gene_lists"
+    possible_genelists = sorted([x for x in os.listdir(os.path.join(path_package_config, genelist_path))
+                                 if x.endswith(".txt")])
 
     def __init__(self, path: str, file_path_yml: Optional[str] = None, loglevel=logging.DEBUG):
         """
@@ -60,9 +57,8 @@ class MSPInitializer:
         self._start_dir = None
         self._file_path_yaml = None
 
-        # list to store all selectable terms; custom and provided
-        self.list_full_gos = []
-        self.list_full_pathways = []
+        # list to store all selectable gene lists (GO terms and pathways); custom and provided
+        self.list_full_genelists = []
 
         # set the specified dirs
         self.start_dir = path
@@ -88,21 +84,17 @@ class MSPInitializer:
         self.reader_data = {}
         self.file_path_yaml = "file"
         # see if any custom lists can be found
-        self.list_full_gos = []
-        self.list_full_gos += MSPInitializer.possible_gos
-        try:
-            self.list_full_gos += [x for x in os.listdir(os.path.join(self._start_dir, "go_terms"))
-                                   if os.path.isfile(os.path.join(self._start_dir, "go_terms", x))]
-        except FileNotFoundError:
-            pass
-
-        self.list_full_pathways = []
-        self.list_full_pathways += MSPInitializer.possible_pathways
-        try:
-            self.list_full_pathways += [x for x in os.listdir(os.path.join(self._start_dir, "pathways"))
-                                        if os.path.isfile(os.path.join(self._start_dir, "pathways", x))]
-        except FileNotFoundError:
-            pass
+        self.list_full_genelists = []
+        self.list_full_genelists += MSPInitializer.possible_genelists
+        # current gene_lists dir, plus legacy go_terms / pathways dirs for backwards compatibility
+        for legacy_dir in (MSPInitializer.genelist_path, "go_terms", "pathways"):
+            try:
+                self.list_full_genelists += [x for x in os.listdir(os.path.join(self._start_dir, legacy_dir))
+                                             if os.path.isfile(os.path.join(self._start_dir, legacy_dir, x))]
+            except FileNotFoundError:
+                pass
+        # dedupe while preserving order (package defaults first, then custom additions)
+        self.list_full_genelists = list(dict.fromkeys(self.list_full_genelists))
 
     @property
     def path_config(self):
@@ -178,23 +170,32 @@ class MSPInitializer:
         return os.path.join(path_package_config, MSPInitializer.default_yml_name)
 
     def init_interest_from_txt(self) -> Tuple[Dict[str, list], Dict[str, list]]:
-        dict_pathway = {}
-        dict_go = {}
-        for pathway in self.configs.get("pathways"):
-            name, proteins = self.read_config_txt_file(pathway)
-            dict_pathway[name] = proteins
+        # a single selection of gene lists (GO terms and pathways are no longer selected separately) feeds
+        # both the pathway-based and GO-based analyses, so both dicts end up referencing the same data
+        selected_genelists = self.configs.get("gene_lists")
+        if not selected_genelists:
+            # fall back to legacy separately-selected go_terms/pathways from an older config.yml
+            selected_genelists = list(dict.fromkeys(
+                list(self.configs.get("pathways", [])) + list(self.configs.get("go_terms", []))
+            ))
+        dict_genelists = {}
+        for genelist in selected_genelists:
+            name, proteins = self.read_config_txt_file(genelist)
+            dict_genelists[name] = proteins
+        return dict_genelists, dict_genelists
 
-        for go in self.configs.get("go_terms"):
-            name, proteins = self.read_config_txt_file(go, False)
-            dict_go[name] = proteins
-        return dict_pathway, dict_go
-
-    def read_config_txt_file(self, file, is_pathway: bool = True) -> Tuple[str, list]:
-        path_full = os.path.join(self.start_dir, "pathways" if is_pathway else "go_terms", file)
-        if not os.path.isfile(path_full):
-            path_full = os.path.join(path_package_config, "pathways" if is_pathway else "go_terms", file)
-            if not os.path.isfile(path_full):
-                raise FileNotFoundError(f"The selected file: {file} cannot be found.")
+    def read_config_txt_file(self, file) -> Tuple[str, list]:
+        for base_dir, sub_dir in (
+                (self.start_dir, MSPInitializer.genelist_path),
+                (self.start_dir, "go_terms"),
+                (self.start_dir, "pathways"),
+                (path_package_config, MSPInitializer.genelist_path),
+        ):
+            path_full = os.path.join(base_dir, sub_dir, file)
+            if os.path.isfile(path_full):
+                break
+        else:
+            raise FileNotFoundError(f"The selected file: {file} cannot be found.")
         name = file.replace(".txt", "")
         with open(path_full) as f:
             proteins = []

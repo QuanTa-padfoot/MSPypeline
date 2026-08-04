@@ -2,11 +2,8 @@ import os
 
 
 def main():
-    go_dir = "../../mspypeline/config/go_terms"
-    pathway_dir = "../../mspypeline/config/pathways"
-
-    go_rst_dir = os.path.abspath("./go_terms")
-    pathway_rst_dir = os.path.abspath("./pathways")
+    gene_lists_dir = "../../mspypeline/config/gene_lists"
+    gene_lists_rst_dir = os.path.abspath("./gene_lists")
 
     def add_dir(source_dir, goal_dir):
         os.makedirs(goal_dir, exist_ok=True)
@@ -21,8 +18,7 @@ def main():
                     out.write("   :literal:" + "\n")
                     out.write("\n")
 
-    add_dir(go_dir, go_rst_dir)
-    add_dir(pathway_dir, pathway_rst_dir)
+    add_dir(gene_lists_dir, gene_lists_rst_dir)
 
 
 if __name__ == "__main__":

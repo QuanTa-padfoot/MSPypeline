@@ -18,11 +18,12 @@ Pathway and GO analysis
     :meth:`~mspypeline.BasePlotter.plot_pathway_analysis` and the volcano plot using
     :meth:`~mspypeline.BasePlotter.plot_r_volcano`.
 
-| Pathway (and GO term) lists are configured globally for a data analysis and not individually for each plot. If one or
-  more pathway lists are selected in the GUI or :ref:`configs file <default-yaml>`, these pathways will
-  be used for any of the three listed plots if they are being created.
-| To change the choice of pathways or GO terms for an analysis, the previously selected pathways have to be un-checked
-  in the corresponding selection box in the GUI or the *"pathways:"* or *"go_term:"* arguments in the configs file have
+| Pathway and GO term lists are configured globally for a data analysis, as a single selection of gene lists, and not
+  individually for each plot. If one or more gene lists are selected in the GUI or :ref:`configs file <default-yaml>`,
+  they will be used for any of the plots listed above that make use of them, whether that is a GO enrichment plot or
+  one of the pathway-based plots.
+| To change the choice of gene lists for an analysis, the previously selected lists have to be un-checked
+  in the gene list selection box in the GUI or the *"gene_lists:"* argument in the configs file has
   to be edited manually.
 
 .. tip::
@@ -31,9 +32,9 @@ Pathway and GO analysis
     1. follow the *one-column-txt-format* that can be seen in the exemplary files listed below,
     2. be stored in one of these two locations:
 
-        - saved in the *.../mspypeline/config/pathway or go_term* directory, where all the other files are stored (files
+        - saved in the *.../mspypeline/config/gene_lists* directory, where all the other files are stored (files
           saved here are available for all experiments and from the GUI).
-        - saved in a *pathways* and *go_terms* directory in the same location where the txt folder of the experiment
+        - saved in a *gene_lists* directory in the same location where the txt folder of the experiment
           data is stored (files saved here are available for the particular experiment and are callable when
           ``mspypeline`` is used as a :ref:`python module <python-quickstart>` or when the list is specified in the
           :ref:`configs file <default-yaml>`.
@@ -44,19 +45,11 @@ Pathway and GO analysis
       `GSEA Molecular Signature Data Base <https://www.gsea-msigdb.org/gsea/msigdb/index.jsp>`__ (22. Feb. 2021)
 
 .. _pathway-proteins:
-
-Pathways
-~~~~~~~~
-.. toctree::
-   :glob:
-
-   pathways/*
-
 .. _go-term-proteins:
 
-GO Terms
-~~~~~~~~
+Gene Lists (Pathways & GO Terms)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 .. toctree::
    :glob:
 
-   go_terms/*
+   gene_lists/*

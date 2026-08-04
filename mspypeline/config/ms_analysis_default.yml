@@ -1,7 +1,7 @@
 # ##### MAIN SETTINGS ########
 # settings that affect data processing
 
-selected_reader: mqreader  # which file reader should be used
+selected_reader: spectroReader  # which file reader should be used
 selected_normalizer: None  # which normalizer should be used
 export_data: false  # should processed data be exported (can be "true" or "false")
 
@@ -11,8 +11,7 @@ use_protein_id: false   # should the protein id be used (can be "true" or "false
 
 equal_variance: false   # should equal variance be assumed for the t-test? (can be "true" or "false")
 
-pathways: []       # list of pathways which should be analyzed
-go_terms: []       # list of go_terms which should be analyzed
+gene_lists: []       # list of gene lists (GO terms and pathways) which should be analyzed
 
 mqreader: {}
 spectroReader: {}
