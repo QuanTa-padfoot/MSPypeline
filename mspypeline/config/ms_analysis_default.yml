@@ -120,3 +120,4 @@ plot_peptide_report_settings:
   create_plot: false
   dfs_to_use: []
   levels: []
+  selected_genes: []  # subset of proteins to analyze; empty means analyze every protein in the selected gene lists

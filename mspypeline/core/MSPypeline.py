@@ -323,6 +323,11 @@ class MSPGUI(tk.Tk):
         self.plot_row("Peptide report", "peptide_report",
                       "Detailed report of each protein in selected pathway(s) based on peptide data\n Requires a .csv file containing data on the peptide level in a folder named `peptide`\n Internet is needed to download protein information from Uniprot.",
                       tab=tab4)
+        # button for narrowing down peptide report generation to specific protein(s) instead of every
+        # protein in the selected gene lists (each protein needs a Uniprot lookup + its own PDF, which is slow)
+        peptide_label = ttk.Label(tab4, text="Select protein(s) for peptide report:", font="Helvetica 10 bold")
+        peptide_label.grid(row=self.heading_length + self.number_of_plots, column=0, pady=20)
+        self.customize_sample_button(plot_text="peptide", tab=tab4)
 
 
         # add all tracing to the variables
@@ -455,6 +460,20 @@ class MSPGUI(tk.Tk):
 
     def reader_setter(self, *args):
         self.selected_reader = self.reader_options[self.reader_text.get()]
+        self._refresh_intensity_options()
+
+    def _current_intensity_options(self):
+        '''Spectronaut exports (read by SpectroReader) never contain LFQ intensity values - that is a
+        MaxQuant-specific concept - so hide "lfq_log2" from the intensity picker in that case.'''
+        if self.selected_reader.name == "spectroReader":
+            return [opt for opt in self.intensity_options if opt != "lfq_log2"]
+        return self.intensity_options
+
+    def _refresh_intensity_options(self):
+        options = self._current_intensity_options()
+        for key, widget in self.plot_settings.items():
+            if key.endswith("_var"):
+                widget.update_options(options)
 
     def _get_default_configs(self):
         # the default yaml never changes at runtime, so only load/parse it from disk once
@@ -610,31 +629,21 @@ class MSPGUI(tk.Tk):
             self.number_of_plots += 1
 
     def customize_sample_button(self, plot_text: str = None, tab = None):
-        '''Create a button for customizing plots (currently available for volcano and timecourse)
+        '''Create a button for customizing plots (currently available for volcano, timecourse and peptide report)
 
-        need to identify plot_text, can be either "volcano" or "timecourse".'''
-        if tab == None:
-            col = 0
-            row = self.heading_length + self.number_of_plots
-            if plot_text == "timecourse":
-                customize = ttk.Button(self, text="Customize", command= lambda: self.customize_timecourse())
-                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
-            elif plot_text == "volcano":
-                customize = ttk.Button(self, text="Select sample", command= lambda: self.customize_volcano())
-                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
-
-            self.number_of_plots += 1
-        else:
-            col = 1
-            row = self.heading_length + self.number_of_plots
-            if plot_text == "timecourse":
-                customize = ttk.Button(tab, text="Customize", command= lambda: self.customize_timecourse())
-                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
-            elif plot_text == "volcano":
-                customize = ttk.Button(tab, text="Select sample", command= lambda: self.customize_volcano())
-                customize.grid(row=row, column=col, sticky=tk.W, padx=5)
-
-            self.number_of_plots += 1
+        need to identify plot_text, can be "volcano", "timecourse" or "peptide".'''
+        button_specs = {
+            "timecourse": ("Customize", self.customize_timecourse),
+            "volcano": ("Select sample", self.customize_volcano),
+            "peptide": ("Select protein(s)", self.customize_peptide_report),
+        }
+        text, command = button_specs[plot_text]
+        parent = self if tab is None else tab
+        col = 0 if tab is None else 1
+        row = self.heading_length + self.number_of_plots
+        customize = ttk.Button(parent, text=text, command=lambda: command())
+        customize.grid(row=row, column=col, sticky=tk.W, padx=5)
+        self.number_of_plots += 1
 
     def customize_volcano(self):
         '''Popup window to select samples for plotting volcano.
@@ -863,6 +872,51 @@ class MSPGUI(tk.Tk):
                                 command= lambda: update_timecourse_settings())
             okButton.grid(row=7, column=1, padx=5, sticky=tk.W)
 
+    def customize_peptide_report(self):
+        '''Popup window to select which specific protein(s) to generate a peptide report for.
+        Without a selection here, plot_peptide_report analyses every protein in every selected gene list -
+        each protein needs its own Uniprot lookup and produces its own PDF, which is slow and can flood the
+        output folder with plots the user did not actually want. Selected settings are passed to configs,
+        which is then picked up by BasePlotter to narrow down which proteins get analysed.'''
+        window = tk.Toplevel()
+        window.geometry("300x450")
+        window.title("Select protein(s) for peptide report")
+
+        all_genes = sorted({gene for genelist in (self.mspinit.interesting_proteins or {}).values()
+                            for gene in genelist})
+        if not all_genes:
+            note = tk.Label(window, text="No gene list selected!\nSelect at least one gene list and press"
+                                        " Update before choosing proteins.")
+            note.grid(row=0, column=0, padx=10, pady=10)
+            return
+
+        gene_label = tk.Label(window, text="Select protein(s) to analyze\n(none selected = analyze all, slow)")
+        gene_label.grid(row=0, column=0)
+        gene_list_box = tk.Listbox(window, selectmode="multiple", height=15, width=len(max(all_genes, key=len))+2)
+        gene_list_box.configure(exportselection=False)
+        gene_list_box.grid(row=1, column=0, sticky=tk.W, padx=20)
+        scrollbar_gene = tk.Scrollbar(window, orient='vertical', command=gene_list_box.yview)
+        scrollbar_gene.grid(row=1, column=0, sticky='nes', padx=20)
+        gene_list_box.config(yscrollcommand=scrollbar_gene.set)
+        for gene in all_genes:
+            gene_list_box.insert("end", gene)
+
+        # restore previous selection from configs
+        for gene in self.mspinit.configs["plot_peptide_report_settings"].get("selected_genes", []):
+            try:
+                gene_list_box.select_set(all_genes.index(gene))
+            except ValueError:
+                pass
+
+        def update_peptide_settings():
+            selected_genes = [gene_list_box.get(i) for i in gene_list_box.curselection()]
+            self.mspinit.configs["plot_peptide_report_settings"]["selected_genes"] = selected_genes
+            print("Protein selection for peptide report updated!")
+            window.destroy()
+
+        okButton = tk.Button(window, text="OK", command=lambda: update_peptide_settings())
+        okButton.grid(row=2, column=0, padx=5, pady=10)
+
     def plot_row(self, text: str, plot_name: str, plot_tool_tip: str = None, tab = None):
         row = self.heading_length + self.number_of_plots
         col = 0
@@ -873,7 +927,7 @@ class MSPGUI(tk.Tk):
             checkbutton.grid(row=row, column=col, sticky=tk.W, padx=20)
             if plot_tool_tip:
                 create_tool_tip(checkbutton, plot_tool_tip)
-            intensity_list = MultiSelectOptionMenu(self, self.intensity_options, "Select Intensities")
+            intensity_list = MultiSelectOptionMenu(self, self._current_intensity_options(), "Select Intensities")
             intensity_list.grid(row=row, column=0, sticky=tk.W, padx=5)
 
             level_list = MultiSelectOptionMenu(self, button_text="Select Levels")
@@ -890,7 +944,7 @@ class MSPGUI(tk.Tk):
             checkbutton.grid(row=row, column=col, sticky=tk.W, padx=20)
             if plot_tool_tip:
                 create_tool_tip(checkbutton, plot_tool_tip)
-            intensity_list = MultiSelectOptionMenu(tab, self.intensity_options, "Select Intensities")
+            intensity_list = MultiSelectOptionMenu(tab, self._current_intensity_options(), "Select Intensities")
             intensity_list.grid(row=row, column=1+col, sticky=tk.W, padx=5)
 
             level_list = MultiSelectOptionMenu(tab, button_text="Select Levels")

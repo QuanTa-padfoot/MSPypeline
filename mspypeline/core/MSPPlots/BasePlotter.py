@@ -2307,6 +2307,14 @@ class BasePlotter:
                 for protein in self.interesting_proteins[pathway]:
                     if protein not in genelist:
                         genelist.append(protein)
+        # a peptide report needs a Uniprot lookup + its own PDF per protein, which is slow; if the user narrowed
+        # the selection down to specific protein(s) via the GUI, only analyse those instead of every gene in
+        # every selected gene list
+        selected_genes = self.configs.get("plot_peptide_report_settings", {}).get("selected_genes")
+        if selected_genes:
+            genelist = [gene for gene in genelist if gene in selected_genes]
+        if not genelist:
+            return plots
         all_peptide_data = self.read_peptide_data(dir_peptide_data_folder = os.path.join(self.start_dir,"peptide"))  # with default settings for peptide_reader()
         for level in levels:
             for df_to_use in dfs_to_use:
