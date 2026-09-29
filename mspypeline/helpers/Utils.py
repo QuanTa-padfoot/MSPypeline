@@ -106,8 +106,14 @@ def venn_names(named_sets: Dict[str, set]) -> Iterator[Tuple[set, set, set]]:
 
 
 def install_r_dependencies(r_package_names, r_bioconducter_package_names):
-    from rpy2.robjects.packages import importr
-    import rpy2.robjects.packages as rpackages
+    try:
+        from rpy2.robjects.packages import importr
+        import rpy2.robjects.packages as rpackages
+    except ImportError as e:
+        # R is optional (see the warning in mspypeline/__init__.py); only the plots that call into R are
+        # unavailable without it, so a missing rpy2 must not stop a plotter from being created
+        logger.warning("Could not import rpy2 (%s). R based plots (volcano, MA, timecourse) will not work.", e)
+        return
 
     r_packages_uninstalled = [x for x in r_package_names if not rpackages.isinstalled(x)]
     r_bioconducter_packages_uninstalled = [x for x in r_bioconducter_package_names if not rpackages.isinstalled(x)]

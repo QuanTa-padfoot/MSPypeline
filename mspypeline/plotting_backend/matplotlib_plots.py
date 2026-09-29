@@ -2057,6 +2057,15 @@ def save_venn(
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])
     return fig, ax
 
+# matplotlib refuses to render figures larger than 2**16 pixels and the pdf format is limited to 200 inch pages.
+# Long proteins with many peptides exceed that easily, which used to make save_peptide_reports raise a ValueError.
+MAX_FIG_SIZE_INCHES = 200
+
+
+def _clamp_fig_size(width: float, height: float) -> Tuple[float, float]:
+    return min(width, MAX_FIG_SIZE_INCHES), min(height, MAX_FIG_SIZE_INCHES)
+
+
 def save_peptide_reports(
         gene: str, uniprotID: str="", n_peptide: int=None,
         peptide_coverage: pd.DataFrame=pd.DataFrame({}), percent_coverage_df: pd.DataFrame=pd.DataFrame({}),
@@ -2102,7 +2111,7 @@ def save_peptide_reports(
         # plot heatmap of peptide coverage
         #######################################################
         if not peptide_coverage.empty:
-            plt.figure(figsize=(0.07*peptide_coverage.shape[1]+0.5,0.7*peptide_coverage.shape[0]+3))
+            plt.figure(figsize=_clamp_fig_size(0.07*peptide_coverage.shape[1]+0.5, 0.7*peptide_coverage.shape[0]+3))
             hm_tick_pos = list(range(0,peptide_coverage.shape[1]+1,25))
             hm_tick_pos[0] = 1
             hm_tick_label = [None] * peptide_coverage.shape[1]
@@ -2141,6 +2150,8 @@ def save_peptide_reports(
         if not percent_coverage_df.empty:
             plot = sns.barplot(data=percent_coverage_df, x="percent_coverage", y="sample",color="#ff6347",
                                 errorbar=None)
+            # seaborn puts the categories at 0..n-1; fixing the ticks first avoids a mismatch warning
+            plot.set_yticks(range(len(percent_coverage_df["sample"])))
             plot.set_yticklabels([item.replace("_"," ") for item in percent_coverage_df["sample"]])
             plot.bar_label(plot.containers[0], fontsize=15)
             plt.xlabel("Coverage of the protein's peptide sequence (%)", fontsize=20)
@@ -2159,14 +2170,15 @@ def save_peptide_reports(
             level_keys = list(peptide_abundance.columns.get_level_values(0).unique())
             level_keys_labels = [key.replace("_", " ") for key in level_keys]
             n_rows, n_cols = get_number_rows_cols_for_fig(peptide_abundance.index)
-            # sort peptides based on their starting point
-            peptide_order = pd.DataFrame({"peptide": peptide, "start_position": pos[0]} for peptide, pos in all_peptide_pos.items())
-            peptide_order.sort_values("start_position", ascending=True, inplace= True)
-            fig, axarr = plt.subplots(n_rows, n_cols, figsize=(n_cols * 5, int(n_rows * len(level_keys) / 1.1)))
+            # sort peptides based on their starting point. Sorting the index of peptide_abundance (instead of
+            # all_peptide_pos) keeps the number of peptides in sync with the number of axes created below
+            peptide_order = sorted(peptide_abundance.index, key=lambda p: all_peptide_pos[p][0])
+            fig, axarr = plt.subplots(n_rows, n_cols, squeeze=False,
+                                      figsize=_clamp_fig_size(n_cols * 5, int(n_rows * len(level_keys) / 1.1)))
             for i in range(n_rows * n_cols - len(peptide_abundance.index)):
                 axarr[n_rows - 1, n_cols - 1 - i].remove()
             fig.suptitle("Intensities of peptides (sum of intensities of precursors with different charges)" + (TECHREP_SUFFIX if exp_has_techrep else ""), size=26)
-            for peptide, (pos, ax) in zip(peptide_order["peptide"], np.ndenumerate(axarr)):
+            for peptide, (pos, ax) in zip(peptide_order, np.ndenumerate(axarr)):
                 start, end = all_peptide_pos[peptide]
                 ax.scatter(peptide_abundance.loc[peptide],
                        [level_keys.index(c) for c in peptide_abundance.columns.get_level_values(0)],
@@ -2202,20 +2214,19 @@ def save_peptide_reports(
             plot_data.sort_values(["start_pos", "Group"], ascending=[True,True], inplace=True)
             # plot!
             with sns.axes_style("whitegrid"):
-                plot = sns.catplot(plot_data, x="peptide",y="intensity", hue="Group", kind="bar", 
-                                   errorbar="sd", 
-                                   legend=False)
-                #sns.pointplot(plot_data, x="peptide",y="intensity", hue="Group", 
-                                   #errorbar="sd", 
-                #                   legend=False, ax = plot)
-                
+                plot = sns.catplot(plot_data, x="peptide",y="intensity", hue="Group", kind="bar",
+                                   errorbar="sd")
                 plot.tick_params(labelsize=20)
-                plt.legend(bbox_to_anchor=(1,0.5),fontsize=20, markerscale=3)
+                # with legend=False seaborn does not label the bars at all, so a plain plt.legend() call ends up
+                # empty. Let seaborn draw the legend and move it instead.
+                sns.move_legend(plot, loc="center left", bbox_to_anchor=(1, 0.5), title=None,
+                                fontsize=20, markerscale=3)
                 plt.xlabel("")
                 plt.ylabel("Log2 intensity ratio (mean ± sd)", fontsize=20)
                 plt.title(f"{gene} peptide quantification", fontsize=24, fontweight="bold")
                 plt.xticks(rotation=90)
-                plt.gcf().set_size_inches(0.3*len(level_keys)*peptide_ratio.shape[0]+3,15+max_peptide_length*0.08)
+                plt.gcf().set_size_inches(*_clamp_fig_size(0.3*len(level_keys)*peptide_ratio.shape[0]+3,
+                                                           15+max_peptide_length*0.08))
                 fig = plot.figure
                 fig.tight_layout(rect=[0, 0.03, 1, 0.95])
                 pdf.savefig(figure=fig)

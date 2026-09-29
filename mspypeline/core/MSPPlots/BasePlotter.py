@@ -185,7 +185,9 @@ class BasePlotter:
         self.file_dir_timecourse = os.path.join(self.start_dir, "timecourse")
         # path for peptide report
         self.file_dir_peptide = os.path.join(self.start_dir, "peptide","peptide_report")
-        
+        # cache for the uniprot sequences requested by the peptide report
+        self._uniprot_sequences: Dict[str, str] = {}
+
 
         # install r packages for volcano and timecourse plots
         from mspypeline.helpers.Utils import install_r_dependencies
@@ -325,8 +327,6 @@ class BasePlotter:
             intensities = np.exp2(intensities)
             
         # ensure data will not have faulty values after log2 transformation
-        print((intensities < 0).sum().sum())
-        print((intensities < 0))
         assert np.isinf(intensities).sum().sum() == 0
         assert (intensities < 0).sum().sum() == 0
         # filter all rows where all intensities are nan
@@ -2167,6 +2167,44 @@ class BasePlotter:
     def read_peptide_data(self):
         raise NotImplementedError
 
+    def get_uniprot_sequence(self, protein_group: str) -> Tuple[str, str]:
+        """
+        | Retrieves the amino acid sequence of a protein group from Uniprot.
+        | A protein group can list several accessions separated by ";", the first accession that Uniprot can resolve
+          is used. Results are cached so that the same accession is only requested once per session.
+
+        Parameters
+        ----------
+        protein_group
+            Content of the `PG.ProteinGroups` column, i.e. one or more Uniprot accessions separated by ";"
+
+        Returns
+        -------
+        The accession that was resolved and its sequence. Both are empty strings if no accession could be resolved.
+        """
+        import requests
+        for uniprot_id in [part.strip() for part in str(protein_group).split(";") if part.strip()]:
+            if uniprot_id in self._uniprot_sequences:
+                sequence = self._uniprot_sequences[uniprot_id]
+                if sequence:
+                    return uniprot_id, sequence
+                continue
+            sequence = ""
+            try:
+                # the fasta resource is read only, a GET returns the entry while a POST is not part of the API
+                r = requests.get(f"https://rest.uniprot.org/uniprotkb/{uniprot_id}.fasta", timeout=30)
+                if r.status_code == 200 and r.text.startswith(">"):
+                    sequence = "".join(r.text.split("\n")[1:]).strip()
+                else:
+                    self.logger.warning("Uniprot has no fasta entry for accession %s (status %s)", uniprot_id,
+                                        r.status_code)
+            except requests.RequestException as e:
+                self.logger.warning("Could not retrieve the sequence of accession %s from uniprot: %s", uniprot_id, e)
+            self._uniprot_sequences[uniprot_id] = sequence
+            if sequence:
+                return uniprot_id, sequence
+        return "", ""
+
     def get_peptide_report_data(self, df_to_use: str, level: int, gene: str, all_peptide_data: dict,**kwargs):
         """
         | Get data on the peptide level 
@@ -2187,7 +2225,7 @@ class BasePlotter:
         -------
         
         """
-        import requests
+        import re
         pd.options.mode.chained_assignment = None
         # subset the peptide data
         all_peptide_df = all_peptide_data.get("peptide_df")
@@ -2208,40 +2246,76 @@ class BasePlotter:
             pass
         else:
             pass
-        all_sample_name = [col for col in protein_peptide_data.columns if col not in ["PG.ProteinGroups", "PG.Genes", "PEP.StrippedSequence", "EG.PrecursorId"]]
-        protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].replace(',', '.', regex=True)
-        protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].replace("Filtered", np.nan)
-        protein_peptide_data.loc[:,all_sample_name] = protein_peptide_data.loc[:,all_sample_name].astype(float)
-        # remove charge state from precursor strings
-        peptide_df = protein_peptide_data.groupby("PEP.StrippedSequence")[all_sample_name].sum().replace(0,np.nan)
-        # make a dictionary to match precursors with peptides
-        peptide_df = peptide_df.transform(lambda x: np.log2(x))
+        # read_peptide_data() renames the quantity columns to plain sample names, every remaining column is a
+        # Spectronaut annotation column and lives in a "<prefix>." namespace. Excluding only the four annotation
+        # columns that are used below would let any other annotation column (e.g. PEP.IsProteotypic, PG.Organisms)
+        # slip into the sample list and break the numeric conversion.
+        all_sample_name = [col for col in protein_peptide_data.columns
+                           if not re.match(r"^(PG|PEP|EG|FG|TG|R)\.", col)]
+        if not all_sample_name:
+            self.logger.warning("Skipping protein %s since no quantity columns were found in the peptide data", gene)
+            return {}
+        # note: assigning back through .loc keeps the original (string) dtype in pandas >= 2.0, so the numeric
+        # values have to be kept in their own dataframe instead of being written back into protein_peptide_data
+        intensities = protein_peptide_data.loc[:, all_sample_name].replace(',', '.', regex=True)
+        # "Filtered" and any other non numeric placeholder Spectronaut may write become NaN
+        intensities = intensities.apply(pd.to_numeric, errors="coerce")
+        # sum the precursors (i.e. the different charge states) of each peptide
+        peptide_df = intensities.groupby(protein_peptide_data["PEP.StrippedSequence"]).sum(min_count=1).replace(0, np.nan)
+        peptide_df = np.log2(peptide_df)
         ##########################################################
         # prepare data to plot the sequence coverage
         ##########################################################
         uniprotID = protein_peptide_data.iloc[0, protein_peptide_data.columns.get_loc("PG.ProteinGroups")]
-        # Make request to uniprot entry fasta file
-        url=f"https://rest.uniprot.org/uniprotkb/{uniprotID}.fasta"
-        r = requests.post(url) 
-        fasta=''.join(r.text)
-        sequence = "".join(fasta.split("\n")[1:])
-        peptide_sequence_in_protein = peptide_df.index
+        uniprotID, sequence = self.get_uniprot_sequence(uniprotID)
+        if not sequence:
+            self.logger.warning("Skipping protein %s since no sequence could be retrieved from uniprot for %s", gene,
+                                protein_peptide_data.iloc[0, protein_peptide_data.columns.get_loc("PG.ProteinGroups")])
+            return {}
         all_peptide_pos = {}
-        for peptide_sequence in peptide_sequence_in_protein:
+        unmapped_peptides = []
+        for peptide_sequence in peptide_df.index:
             start_pos = sequence.find(peptide_sequence)
-            end_pos = start_pos + len(peptide_sequence) 
             if start_pos == -1:
-                print(f"Warning: peptide [{peptide_sequence}] cannot be mapped to protein {gene} with uniprot ID {uniprotID}")
+                unmapped_peptides.append(peptide_sequence)
             else:
-                all_peptide_pos[peptide_sequence] = [start_pos, end_pos]
+                all_peptide_pos[peptide_sequence] = [start_pos, start_pos + len(peptide_sequence)]
+        if unmapped_peptides:
+            # peptides that are not part of the retrieved sequence (e.g. because they belong to another member of
+            # the protein group) have to be dropped as well, otherwise every consumer of all_peptide_pos below and
+            # in save_peptide_reports raises a KeyError for them
+            self.logger.warning("%s: %s of %s peptides cannot be mapped to uniprot ID %s and are excluded from the "
+                                "report: %s", gene, len(unmapped_peptides), peptide_df.shape[0], uniprotID,
+                                ", ".join(unmapped_peptides))
+            peptide_df = peptide_df.drop(index=unmapped_peptides)
+        if peptide_df.empty:
+            self.logger.warning("Skipping protein %s since none of its peptides could be mapped to uniprot ID %s",
+                                gene, uniprotID)
+            return {}
+        # only the samples of the analysis design are reported on, and only those that the peptide data actually
+        # contains. Keeping unknown columns would put samples into the plots that are grouped by a bogus level key,
+        # keeping missing ones would raise a KeyError below.
+        samples_per_condition, missing_samples = {}, []
+        for condition in all_conditions:
+            condition_samples = self.all_tree_dict[df_to_use][condition].aggregate(None).columns
+            samples_per_condition[condition] = [s for s in condition_samples if s in peptide_df.columns]
+            missing_samples += [s for s in condition_samples if s not in peptide_df.columns]
+        design_samples = [sample for condition in all_conditions for sample in samples_per_condition[condition]]
+        if not design_samples:
+            self.logger.warning("Skipping protein %s since none of the samples of the analysis design were found in "
+                                "the peptide data", gene)
+            return {}
+        if missing_samples:
+            self.logger.warning("The following samples of the analysis design are not present in the peptide data and "
+                                "are missing from the peptide report: %s", ", ".join(missing_samples))
+        peptide_df = peptide_df.loc[:, design_samples]
         # initiate a dataframe for plotting the heatmap
         heatmap_dataset = pd.DataFrame(0, columns=range(len(sequence)), index=all_conditions)
         heatmap_dataset.sort_index(axis=0, inplace=True)
         percent_coverage_dict = {"sample":[], "percent_coverage":[]}
         # update heatmap
         for condition in all_conditions:
-            filter_col = self.all_tree_dict[df_to_use][condition].aggregate(None).columns
-            for sample in filter_col:
+            for sample in samples_per_condition[condition]:
                 detection_sample = [False] * len(sequence)
                 detected_peptide = peptide_df[peptide_df[sample].notna()].index.tolist()
                 for peptide in detected_peptide:
@@ -2324,8 +2398,7 @@ class BasePlotter:
                         plot_kwargs = dict(level=level, gene=gene, save_path=self.file_dir_peptide, file_name=f"{gene}_peptide_report_level{level}.pdf",
                                             exp_has_techrep=self.experiment_has_techrep)
                         plot_kwargs.update(**kwargs)
-                        plot = matplotlib_plots.save_peptide_reports(**peptide_data, **plot_kwargs)
-                        
+                        plots.append(matplotlib_plots.save_peptide_reports(**peptide_data, **plot_kwargs))
         return plots
 
     def get_r_MA_data(self, g1: str, g2: str, df_to_use: str):
