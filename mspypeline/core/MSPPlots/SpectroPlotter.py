@@ -112,26 +112,52 @@ class SpectroPlotter(BasePlotter):
                 peptide_dir.append(new_filedir)
             elif file.endswith(".csv") or file.endswith(".tsv"):
                 peptide_dir.append(os.path.join(dir_peptide_data_folder, file))
-        try:
-            peptide_dir = peptide_dir[0]
-        except (IndexError):
-            peptide_dir = []
+        if not peptide_dir:
+            raise FileNotFoundError(f"No .csv, .tsv or .xls peptide data found in {dir_peptide_data_folder}")
+        peptide_dir = peptide_dir[0]
+        required_cols = ('PG.ProteinGroups', 'PG.Genes', 'PEP.StrippedSequence', 'EG.PrecursorId')
+        # only sniff the separator on the first rows, a peptide report of a larger experiment is far too big to be
+        # read once per candidate separator
+        separator, raw_columns = None, None
         for cur_separator in ['\t', ';', ',']:
             try:
-                peptide_df = pd.read_csv(peptide_dir, delimiter=cur_separator, dtype=str)
-                if ('PG.ProteinGroups' in peptide_df.columns) and ('PG.Genes' in peptide_df.columns) and ('PEP.StrippedSequence' in peptide_df.columns) and ('EG.PrecursorId' in peptide_df.columns):
-                    break
-            except (ValueError):
-                pass
-        peptide_df.columns = [col.replace(" ","") for col in peptide_df.columns]
-        # remove "PG.IsSingleHit", ".EG.Quantity", and ".Qvalue" columns
-        peptide_df.drop(peptide_df.filter(regex='PG.IsSingleHit|PG.Quantity|EG.Qvalue').columns, axis=1, inplace=True)
+                candidate = pd.read_csv(peptide_dir, delimiter=cur_separator, dtype=str, nrows=2)
+            except (ValueError, pd.errors.ParserError):
+                continue
+            if all(col in [c.replace(" ", "") for c in candidate.columns] for col in required_cols):
+                separator, raw_columns = cur_separator, list(candidate.columns)
+                break
+        if separator is None:
+            # without a clear message this used to surface as an UnboundLocalError further down
+            raise ValueError(f"Could not read {peptide_dir} as a Spectronaut peptide report: none of the tested "
+                             f"separators (tab, ';', ',') produced the required columns {required_cols}")
+        # "PG.IsSingleHit", "PG.Quantity" and "EG.Qvalue" are not used, so they are never read in the first place.
+        # A report of a real experiment has one of those per run, i.e. they make up the bulk of the file.
+        drop_pattern = re.compile('PG.IsSingleHit|PG.Quantity|EG.Qvalue')
+        use_columns = [col for col in raw_columns if not drop_pattern.search(col.replace(" ", ""))]
+        quant_pattern = re.compile(r"EG\.TotalQuantity")
+        # read in chunks and narrow the quantity columns to float right away, keeping 200k+ rows of a peptide
+        # report as python strings needs several GB of memory
+        chunks = []
+        for chunk in pd.read_csv(peptide_dir, delimiter=separator, dtype=str, usecols=use_columns,
+                                 chunksize=50000):
+            chunk.columns = [col.replace(" ", "") for col in chunk.columns]
+            quant_cols = [col for col in chunk.columns if quant_pattern.search(col)]
+            # Spectronaut writes "Filtered" for runs without a quantity and may use ',' as the decimal separator
+            chunk[quant_cols] = chunk[quant_cols].replace(',', '.', regex=True).apply(pd.to_numeric,
+                                                                                     errors="coerce").astype("float32")
+            chunks.append(chunk)
+        if not chunks:
+            raise ValueError(f"{peptide_dir} does not contain any peptide data")
+        peptide_df = pd.concat(chunks, ignore_index=True) if len(chunks) > 1 else chunks[0]
+        del chunks
         # rename columns
-        all_quant_cols = peptide_df.filter(regex="EG.TotalQuantity").columns.to_list()
+        all_quant_cols = peptide_df.filter(regex=r"EG\.TotalQuantity").columns.to_list()
         all_prefixes = [s.split(".EG")[0] for s in all_quant_cols]
         all_prefixes = [s.split(".raw")[0] for s in all_prefixes]
-        all_sample_name = [s.split("]")[1] for s in all_prefixes]
-        rename_dict = {all_quant_cols[i]: all_sample_name[i] for i in range(len(all_quant_cols))} 
+        # Spectronaut prefixes the run with "[<n>]"; not every export has it, so only strip it when it is there
+        all_sample_name = [s.split("]")[1] if "]" in s else s for s in all_prefixes]
+        rename_dict = {all_quant_cols[i]: all_sample_name[i] for i in range(len(all_quant_cols))}
         peptide_df.rename(columns=rename_dict, inplace= True)
         
         sample_mapping = os.path.join(os.path.dirname(dir_peptide_data_folder), "config/sample_mapping.txt")
@@ -140,8 +166,12 @@ class SpectroPlotter(BasePlotter):
                 next(f)  # skip the title line
                 for line in f.readlines():
                     sample_name = line.split('\t')
-                    old_col = peptide_df.filter(regex=sample_name[0]).columns.to_list()
-                    rename_col_dict = {col: col.replace(sample_name[0], sample_name[1][:-1]) for col in old_col}
+                    if len(sample_name) < 2:
+                        continue
+                    old_name, new_name = sample_name[0].strip(), sample_name[1].strip()
+                    # the raw file names may contain regex metacharacters (e.g. "."), so match them literally
+                    old_col = peptide_df.filter(regex=re.escape(old_name)).columns.to_list()
+                    rename_col_dict = {col: col.replace(old_name, new_name) for col in old_col}
                     peptide_df.rename(columns=rename_col_dict, inplace=True)
                 f.close()
         except FileNotFoundError:
